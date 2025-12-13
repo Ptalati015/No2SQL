@@ -1,0 +1,63 @@
+# .NET build outputs
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Rider
+.idea/
+*.ipr
+*.iws
+*.iml
+
+# Logs & temp
+*.log
+*.tlog
+*.tmp
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+# Restore caches / auto-generated
+project.lock.json
+project.assets.json
+*.nuget.g.props
+*.nuget.g.targets
+*.nuget.dgspec.json
+
+# Build configs
+Debug/
+Release/
+
+# User-specific settings
+*.userprefs
+
+# Coverage / test
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Publish outputs
+publish/
+
+# Secrets / environment
+.env
+.env.*
+secrets.json
+
+# ASP.NET config (keep production variants tracked explicitly)
+appsettings.Development.json
+appsettings.Local.json
+# If you want to track only appsettings.json, leave it; comment below lines to track Dev/Local
+
+# OS files
+Thumbs.db
+.DS_Store

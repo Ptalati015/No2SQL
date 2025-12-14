@@ -8,8 +8,12 @@ namespace No2SQL.Core;
 public class SchemaAnalyzer
 {
     private readonly MongoClient _client;
-    public SchemaAnalyzer(string connectionString)
+    public SchemaAnalyzer(string? connectionString)
     {
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
+        }
         _client = new MongoClient(connectionString);
     }
      /// <summary>

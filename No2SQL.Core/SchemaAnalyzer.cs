@@ -16,7 +16,7 @@ public class SchemaAnalyzer
         }
         _client = new MongoClient(connectionString);
     }
-     /// <summary>
+        /// <summary>
         /// Analyzes the specified database and returns a schema summary.
         /// </summary>
         /// <param name="databaseName">The name of the MongoDB database to inspect</param>

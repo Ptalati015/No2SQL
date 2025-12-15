@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "No2SQLServer": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [ "run", "--project", "./No2SQL" ],
+      "env": {
+        "NO2SQL_MONGO": "<your_connection_string_here>"
+      }
+    }
+  }
+}

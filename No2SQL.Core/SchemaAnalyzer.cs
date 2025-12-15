@@ -1,4 +1,5 @@
-﻿using MongoDB.Driver;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -34,9 +35,9 @@ public class SchemaAnalyzer
 
                 foreach (var collectionName in collectionNames)
                 {
-                    var collection = db.GetCollection<dynamic>(collectionName);
+                    var collection = db.GetCollection<BsonDocument>(collectionName);
 
-                    var sample = await collection.Find(Builders<dynamic>.Filter.Empty).Limit(1).FirstOrDefaultAsync();
+                    var sample = await collection.Find(Builders<BsonDocument>.Filter.Empty).Limit(1).FirstOrDefaultAsync();
 
                     var fields = new List<string>();
 
@@ -55,9 +56,33 @@ public class SchemaAnalyzer
             
             } catch(Exception ex)
             {
+                if (ex.InnerException != null)
+                {
+                    Console.Error.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
+                Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}\n{ex.StackTrace}");
                 throw new Exception($"Error analyzing database '{databaseName}': {ex.Message}", ex);
+
             }
            
+        }
+
+        /// <summary>
+        /// Lists all available databases on the MongoDB server.
+        /// </summary>
+        /// <returns>A list of database names</returns>
+        public async Task<List<string>> ListDatabasesAsync()
+        {
+            try
+            {
+                var databases = await _client.ListDatabaseNamesAsync();
+                return await databases.ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error listing databases: {ex.Message}\n{ex.StackTrace}");
+                throw new Exception($"Error listing databases: {ex.Message}", ex);
+            }
         }
 
 

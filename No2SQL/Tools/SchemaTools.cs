@@ -25,7 +25,25 @@ internal class SchemaTools
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}");
+            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}\n{ex.StackTrace}");
             return $"Error analyzing database '{databaseName}': {ex.Message}";
+        }
+    }
+
+    [McpServerTool]
+    [Description("List all available databases on the MongoDB server.")]
+    public async Task<string> ListDatabases()
+    {
+        try
+        {
+            var databases = await _analyzer.ListDatabasesAsync();
+            return $"Available databases ({databases.Count}):\n" +
+                string.Join("\n", databases.Select(db => $"- {db}"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in ListDatabases: {ex.Message}\n{ex.StackTrace}");
+            return $"Error listing databases: {ex.Message}";
         }
     }
 }

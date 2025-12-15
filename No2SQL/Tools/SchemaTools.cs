@@ -12,9 +12,20 @@ internal class SchemaTools
     
     [McpServerTool]
     [Description("Test AnalyzeAsync on a MongoDB database.")]
-    public async Task<Dictionary<string, List<string>>> TestAnalyze(
+    public async Task<string> TestAnalyze(
         [Description("Database name")] string databaseName)
     {
-        return await _analyzer.AnalyzeAsync(databaseName);
+        try
+        {
+            var res = await _analyzer.AnalyzeAsync(databaseName);
+            return  $"Schema analysis for database '{databaseName}':\n" +
+                string.Join("\n", res.Select(kvp => 
+                    $"- Collection '{kvp.Key}': Fields: {string.Join(", ", kvp.Value)}"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}");
+            return $"Error analyzing database '{databaseName}': {ex.Message}";
+        }
     }
 }

@@ -23,33 +23,41 @@ public class SchemaAnalyzer
         /// <returns>A dictionary mapping collection names to field metadata</returns>
         public async Task<Dictionary<string, List<string>>> AnalyzeAsync(string databaseName)
         {
-            var result = new Dictionary<string, List<string>>();
-            var db = _client.GetDatabase(databaseName);
-
-            // Get all collections in the database
-            var collections = await db.ListCollectionNamesAsync();
-            var collectionNames = await collections.ToListAsync();
-
-            foreach (var collectionName in collectionNames)
+            try 
             {
-                var collection = db.GetCollection<dynamic>(collectionName);
+                var result = new Dictionary<string, List<string>>();
+                var db = _client.GetDatabase(databaseName);
 
-                var sample = await collection.Find(Builders<dynamic>.Filter.Empty).Limit(1).FirstOrDefaultAsync();
+                // Get all collections in the database
+                var collections = await db.ListCollectionNamesAsync();
+                var collectionNames = await collections.ToListAsync();
 
-                var fields = new List<string>();
-
-                if (sample != null)
+                foreach (var collectionName in collectionNames)
                 {
-                    foreach (var kvp in sample.ToBsonDocument().Elements)
+                    var collection = db.GetCollection<dynamic>(collectionName);
+
+                    var sample = await collection.Find(Builders<dynamic>.Filter.Empty).Limit(1).FirstOrDefaultAsync();
+
+                    var fields = new List<string>();
+
+                    if (sample != null)
                     {
-                        fields.Add($"{kvp.Name} ({kvp.Value.BsonType})");
+                        foreach (var kvp in sample.ToBsonDocument().Elements)
+                        {
+                            fields.Add($"{kvp.Name} ({kvp.Value.BsonType})");
+                        }
                     }
+
+                    result[collectionName] = fields;
                 }
 
-                result[collectionName] = fields;
-            }
-
             return result;
+            
+            } catch(Exception ex)
+            {
+                throw new Exception($"Error analyzing database '{databaseName}': {ex.Message}", ex);
+            }
+           
         }
 
 

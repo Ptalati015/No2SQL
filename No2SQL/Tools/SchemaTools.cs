@@ -46,4 +46,23 @@ internal class SchemaTools
             return $"Error listing databases: {ex.Message}";
         }
     }
+
+    [McpServerTool]
+    [Description("Find Foreign Keys in a MongoDB database.")]
+    public async Task<string> FindForeignKeys(
+        [Description("Database name")] string databaseName)
+    {
+        try
+        {
+            var foreignKeys = await _analyzer.FindForeignKeysAsync(databaseName);
+            return $"Foreign keys in database '{databaseName}':\n" +
+                string.Join("\n", foreignKeys.Select(kvp =>
+                    $"- Collection '{kvp.Key}': References: {string.Join(", ", kvp.Value)}"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in FindForeignKeys: {ex.Message}\n{ex.StackTrace}");
+            return $"Error finding foreign keys in database '{databaseName}': {ex.Message}";
+        }
+    }
 }

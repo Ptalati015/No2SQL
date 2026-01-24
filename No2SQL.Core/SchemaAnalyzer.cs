@@ -28,7 +28,6 @@ public class SchemaAnalyzer
             {
                 var result = new Dictionary<string, List<string>>();
                 var db = _client.GetDatabase(databaseName);
-
                 // Get all collections in the database
                 var collections = await db.ListCollectionNamesAsync();
                 var collectionNames = await collections.ToListAsync();
@@ -84,6 +83,50 @@ public class SchemaAnalyzer
                 throw new Exception($"Error listing databases: {ex.Message}", ex);
             }
         }
+ 
+        
+        /// <summary>
+        /// Finds potential foreign key relationships in the specified database based on naming conventions.
+        /// </summary>
+        /// <param name="databaseName"></param>
+        /// <returns></returns>
+        public async Task<Dictionary<string, List<string>>> FindForeignKeysAsync(string databaseName)
+        {
+            var foreignKeys = new Dictionary<string, List<string>>();
+            var db = _client.GetDatabase(databaseName);
 
+            var collections = await db.ListCollectionNamesAsync();
+            var collectionNames = await collections.ToListAsync();
+
+            foreach (var collectionName in collectionNames)
+            {
+                var collection = db.GetCollection<BsonDocument>(collectionName);
+                var sample = await collection.Find(Builders<BsonDocument>.Filter.Empty).Limit(100).ToListAsync();
+
+                foreach (var document in sample)
+                {
+                    foreach (var element in document.Elements)
+                    {
+                        if (element.Name.EndsWith("Id") && element.Value.IsObjectId)
+                        {
+                            var referencedCollection = element.Name.Substring(0, element.Name.Length - 2);
+                            if (collectionNames.Contains(referencedCollection))
+                            {
+                                if (!foreignKeys.ContainsKey(collectionName))
+                                {
+                                    foreignKeys[collectionName] = new List<string>();
+                                }
+                                if (!foreignKeys[collectionName].Contains(referencedCollection))
+                                {
+                                    foreignKeys[collectionName].Add(referencedCollection);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return foreignKeys;
+        }
 
 }

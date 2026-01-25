@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using No2SQL.Core;
-
+using No2SQL.Core.Models;
 internal class SchemaTools
 {
     private readonly SchemaAnalyzer _analyzer;
@@ -54,15 +54,23 @@ internal class SchemaTools
     {
         try
         {
-            var foreignKeys = await _analyzer.FindForeignKeysAsync(databaseName);
+            var fks = await _analyzer.FindForeignKeysAsync(databaseName);
+            if (fks.Count == 0)
+            {
+                return $"No foreign keys found in database '{databaseName}'.";
+            }
+
             return $"Foreign keys in database '{databaseName}':\n" +
-                string.Join("\n", foreignKeys.Select(kvp =>
-                    $"- Collection '{kvp.Key}': References: {string.Join(", ", kvp.Value)}"));
+                string.Join("\n", fks.Select(fk =>
+                    $"- Collection '{fk.FromCollection}', Field '{fk.FieldName}' -> " +
+                    $"Collection '{fk.ToCollection}', Field '{fk.FieldName}' " +
+                    $"(Confidence: {fk.Confidence:P1})"));
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error in FindForeignKeys: {ex.Message}\n{ex.StackTrace}");
             return $"Error finding foreign keys in database '{databaseName}': {ex.Message}";
         }
+     
     }
 }

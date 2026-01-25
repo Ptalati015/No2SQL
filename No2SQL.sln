@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "No2SQL.Sql", "No2SQL.Sql\No
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "No2SQL.Visuals", "No2SQL.Visuals\No2SQL.Visuals.csproj", "{A9D07CDD-AEC2-4CC7-8078-1B8DD0C7E349}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "No2SQL.Utils", "No2SQL.Utils\No2SQL.Utils.csproj", "{75156C9F-DC4D-47BB-93FC-ED00E4087856}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{A9D07CDD-AEC2-4CC7-8078-1B8DD0C7E349}.Release|x64.Build.0 = Release|Any CPU
 		{A9D07CDD-AEC2-4CC7-8078-1B8DD0C7E349}.Release|x86.ActiveCfg = Release|Any CPU
 		{A9D07CDD-AEC2-4CC7-8078-1B8DD0C7E349}.Release|x86.Build.0 = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|x64.Build.0 = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Debug|x86.Build.0 = Debug|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|Any CPU.Build.0 = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|x64.ActiveCfg = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|x64.Build.0 = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|x86.ActiveCfg = Release|Any CPU
+		{75156C9F-DC4D-47BB-93FC-ED00E4087856}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

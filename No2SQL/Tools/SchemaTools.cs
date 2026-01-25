@@ -67,4 +67,24 @@ internal class SchemaTools
             return $"Error listing collections with Id Like fields for database '{databaseName}': {ex.Message}";
         }
     }
+
+    [McpServerTool]
+    [Description("List all Collections and their inferred Foreign Key Like fields on a MongoDB database.")]
+    public async Task<string> ListInferredRelationships(
+        [Description("Database name")] string databaseName)
+    {
+        try
+        {
+            var res = await _analyzer.GetFieldRelationshipsAsync(databaseName);
+            return  $"Inferred Relationships for database '{databaseName}':\n" +
+                string.Join("\n", res.Select(kvp => 
+                    $"- Collection '{kvp.Key}': Foreign Key Like Fields: {string.Join(", ", kvp.Value)}"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}");
+            Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}\n{ex.StackTrace}");
+            return $"Error listing inferred relationships for database '{databaseName}': {ex.Message}";
+        }
+    }
 }

@@ -47,30 +47,24 @@ internal class SchemaTools
         }
     }
 
+   
     [McpServerTool]
-    [Description("Find Foreign Keys in a MongoDB database.")]
-    public async Task<string> FindForeignKeys(
+    [Description("List all Collections and their inferred Id Like fields on a MongoDB database.")]
+    public async Task<string> ListCollectionsWithIdLikeFields(
         [Description("Database name")] string databaseName)
     {
         try
         {
-            var fks = await _analyzer.FindForeignKeysAsync(databaseName);
-            if (fks.Count == 0)
-            {
-                return $"No foreign keys found in database '{databaseName}'.";
-            }
-
-            return $"Foreign keys in database '{databaseName}':\n" +
-                string.Join("\n", fks.Select(fk =>
-                    $"- Collection '{fk.FromCollection}', Field '{fk.FieldName}' -> " +
-                    $"Collection '{fk.ToCollection}', Field '{fk.FieldName}' " +
-                    $"(Confidence: {fk.Confidence:P1})"));
+            var res = await _analyzer.GetAllIdLikeFieldsAsync(databaseName);
+            return  $"Collections with Id Like fields for database '{databaseName}':\n" +
+                string.Join("\n", res.Select(kvp => 
+                    $"- Collection '{kvp.Key}': Id Like Fields: {string.Join(", ", kvp.Value)}"));
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in FindForeignKeys: {ex.Message}\n{ex.StackTrace}");
-            return $"Error finding foreign keys in database '{databaseName}': {ex.Message}";
+            Console.Error.WriteLine($"Error in ListCollectionsWithIdLikeFields: {ex.Message}");
+            Console.Error.WriteLine($"Error in ListCollectionsWithIdLikeFields: {ex.Message}\n{ex.StackTrace}");
+            return $"Error listing collections with Id Like fields for database '{databaseName}': {ex.Message}";
         }
-     
     }
 }

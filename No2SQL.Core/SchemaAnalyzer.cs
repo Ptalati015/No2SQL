@@ -166,4 +166,43 @@ public class SchemaAnalyzer
     }
 
 
+        /// <summary>
+        /// Gets all fields that look like foreign keys (ending with _id, Id, or ID) in each collection of the specified database.
+        /// </summary>
+        /// <param name="databaseName"></param>
+        /// <returns></returns>
+        public async Task<Dictionary<string, HashSet<string>>> GetAllIdLikeFieldsAsync(string databaseName) {
+            var db = _client.GetDatabase(databaseName);
+
+            var result = new Dictionary<string, HashSet<string>>();
+            var fkPattern = new Regex(@"(.+?)(_id|Id|ID)$", RegexOptions.IgnoreCase);
+
+            var collections = await db.ListCollectionNamesAsync();
+            var collectionNames = await collections.ToListAsync();
+
+            foreach (var collectionName in collectionNames)
+            {
+                var fields = new HashSet<string>();
+                var collection = db.GetCollection<BsonDocument>(collectionName);
+
+                var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
+                                                .Limit(200)
+                                                .ToListAsync();
+
+                foreach (var doc in sampleDocs)
+                {
+                    foreach (var element in doc.Elements)
+                    {
+                        if (fkPattern.IsMatch(element.Name))
+                        {
+                            fields.Add(element.Name);
+                        }
+                    }
+                }
+
+                result[collectionName] = fields;
+            }
+
+            return result;
+        }
 }

@@ -1,10 +1,12 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
+using No2SQL.Core.Models;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-
-
+using No2SQL.Utils;
 namespace No2SQL.Core;
+
 
 public class SchemaAnalyzer
 {
@@ -90,43 +92,78 @@ public class SchemaAnalyzer
         /// </summary>
         /// <param name="databaseName"></param>
         /// <returns></returns>
-        public async Task<Dictionary<string, List<string>>> FindForeignKeysAsync(string databaseName)
-        {
-            var foreignKeys = new Dictionary<string, List<string>>();
+        public async Task<List<Relationship>> FindForeignKeysAsync(string databaseName) {
             var db = _client.GetDatabase(databaseName);
 
+            // Get all collections
             var collections = await db.ListCollectionNamesAsync();
             var collectionNames = await collections.ToListAsync();
 
-            foreach (var collectionName in collectionNames)
+            // Preload sample documents for each collection
+            var samples = new Dictionary<string, List<BsonDocument>>();
+            foreach (var name in collectionNames)
             {
-                var collection = db.GetCollection<BsonDocument>(collectionName);
-                var sample = await collection.Find(Builders<BsonDocument>.Filter.Empty).Limit(100).ToListAsync();
+                var col = db.GetCollection<BsonDocument>(name);
+                samples[name] = await col.Find(FilterDefinition<BsonDocument>.Empty)
+                                        .Limit(200)
+                                        .ToListAsync();
+            }
 
-                foreach (var document in sample)
+            var relationships = new List<Relationship>();
+            var fkPattern = new Regex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase);
+
+            foreach (var sourceCollection in collectionNames)
+            {
+                foreach (var doc in samples[sourceCollection])
                 {
-                    foreach (var element in document.Elements)
+                    foreach (var element in doc.Elements)
                     {
-                        if (element.Name.EndsWith("Id") && element.Value.IsObjectId)
+                        var match = fkPattern.Match(element.Name);
+                        if (!match.Success) continue;
+
+                        var fkPrefix = match.Groups[1].Value; // e.g. "movie" from "movie_id"
+                        var normalizedFk = Util.Singularize(fkPrefix.ToLower());
+
+                        foreach (var targetCollection in collectionNames)
                         {
-                            var referencedCollection = element.Name.Substring(0, element.Name.Length - 2);
-                            if (collectionNames.Contains(referencedCollection))
+                            var normalizedTarget = Util.Singularize(targetCollection.ToLower());    
+                            // Check naming match
+                            if (normalizedFk != normalizedTarget)
+                                continue;
+
+                            // Validate by sampling referenced IDs
+                            var fkValues = samples[sourceCollection]
+                                .Select(d => d.GetValue(element.Name, BsonNull.Value))
+                                .Where(v => !v.IsBsonNull)
+                                .Take(50)
+                                .Select(v => Util.NormalizeId(v))
+                                .ToHashSet();
+
+                            var targetIds = samples[targetCollection]
+                                .Select(d => Util.NormalizeId(d.GetValue("_id", BsonNull.Value)))
+                                .Where(v => v != null)
+                                .ToHashSet();
+
+                            var matches = fkValues.Intersect(targetIds).Count();
+                            var confidence = (double)matches / Math.Max(1, fkValues.Count);
+
+                            if (matches > 0)
                             {
-                                if (!foreignKeys.ContainsKey(collectionName))
+                                relationships.Add(new Relationship
                                 {
-                                    foreignKeys[collectionName] = new List<string>();
-                                }
-                                if (!foreignKeys[collectionName].Contains(referencedCollection))
-                                {
-                                    foreignKeys[collectionName].Add(referencedCollection);
-                                }
+                                    FromCollection = sourceCollection,
+                                    ToCollection = targetCollection,
+                                    FieldName = element.Name,
+                                    Confidence = confidence
+                                });
                             }
                         }
                     }
                 }
             }
 
-            return foreignKeys;
-        }
+            return relationships;
+    }
+
 
 }

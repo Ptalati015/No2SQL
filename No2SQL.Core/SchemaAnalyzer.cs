@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using No2SQL.Utils;
+using System.Security.Cryptography.X509Certificates;
 namespace No2SQL.Core;
 
 
@@ -203,6 +204,41 @@ public class SchemaAnalyzer
                 result[collectionName] = fields;
             }
 
+            return result;
+        }
+        
+        
+        /// <summary>
+        /// Gets field relationships for a specific collection in the specified database.
+        /// </summary>
+        /// <param name="databaseName"></param>
+        /// <returns></returns>
+        public async Task<Dictionary<string, List<string>>> GetFieldRelationshipsAsync(string databaseName)
+        {
+            var result = new Dictionary<string, List<string>>();
+            
+            var relationships = await GetAllIdLikeFieldsAsync(databaseName);
+            if(relationships == null)
+                return result;
+            
+            var collectionsNames = relationships.Keys;
+
+            foreach (var id in relationships.Values)
+            {
+                foreach (var field in id)
+                {
+                    if (!result.ContainsKey(field))
+                    {
+                        result[field] = new List<string>();
+                    }
+                    collectionsNames.ToList().ForEach(cn => {
+                        if (!result[field].Contains(cn))
+                        {
+                            result[field].Add(cn);
+                        }
+                    });
+                }
+            }
             return result;
         }
 }

@@ -273,6 +273,9 @@ public class SchemaAnalyzer
 
             foreach (var fkField in fkFields)
             {
+                if (fkField == "_id") {continue;}
+                
+
                 // Extract FK values from sample docs
                 var fkValues = sampleDocs
                     .Where(d => d.Contains(fkField))
@@ -287,8 +290,17 @@ public class SchemaAnalyzer
                 // Compare FK values to every collection's _id values
                 foreach (var targetCollection in allIds.Keys)
                 {
-                    var targetIds = allIds[targetCollection];
+                    if (sourceCollection == targetCollection) {
+                          continue; // ignore self-relationships
+                    }
+                  
 
+                    if (targetCollection.StartsWith("embedded_")) {
+                        continue; // ignore embedded collections 
+                    }
+
+                    var targetIds = allIds[targetCollection];
+                    
                     // Count matches
                     var matches = fkValues.Intersect(targetIds).Count();
                     if (matches == 0)

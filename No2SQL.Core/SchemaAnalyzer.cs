@@ -247,65 +247,107 @@ public class SchemaAnalyzer
         /// </summary>
         /// <param name="databaseName"></param>
         /// <returns></returns>
-        public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName) {
-            var relationships = new List<Relationship>();
+      public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName) {
+        var relationships = new List<Relationship>();
 
-            var allIds = await GetFieldRelationshipsAsync(databaseName);
+        // 1. Get all _id values per collection
+        var allIds = await GetAllIdsInDatabaseAsync(databaseName);
 
-            var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+        // 2. Get all ID-like fields per collection
+        var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
 
-            var db = _client.GetDatabase(databaseName);
+        var db = _client.GetDatabase(databaseName);
 
-            foreach (var sourceCollection in idLikeFields.Keys)
+        foreach (var sourceCollection in idLikeFields.Keys)
+        {
+            var fkFields = idLikeFields[sourceCollection];
+            if (fkFields.Count == 0)
+                continue;
+
+            var collection = db.GetCollection<BsonDocument>(sourceCollection);
+
+            // Sample documents from the source collection
+            var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
+                                            .Limit(200)
+                                            .ToListAsync();
+
+            foreach (var fkField in fkFields)
             {
-                var fkFields = idLikeFields[sourceCollection];
-                if (fkFields.Count == 0)
+                // Extract FK values from sample docs
+                var fkValues = sampleDocs
+                    .Where(d => d.Contains(fkField))
+                    .Select(d => Util.NormalizeId(d.GetValue(fkField)))
+                    .Where(v => v != null)
+                    .Take(100)
+                    .ToList();
+
+                if (fkValues.Count == 0)
                     continue;
 
-                var collection = db.GetCollection<BsonDocument>(sourceCollection);
-
-                // Sample documents from the source collection
-                var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                                .Limit(200)
-                                                .ToListAsync();
-
-                foreach (var fkField in fkFields)
+                // Compare FK values to every collection's _id values
+                foreach (var targetCollection in allIds.Keys)
                 {
-                    // Extract FK values from sample docs
-                    var fkValues = sampleDocs
-                        .Where(d => d.Contains(fkField))
-                        .Select(d => Util.NormalizeId(d.GetValue(fkField)))
-                        .Where(v => v != null)
-                        .Take(100)
-                        .ToList();
+                    var targetIds = allIds[targetCollection];
 
-                    if (fkValues.Count == 0)
+                    // Count matches
+                    var matches = fkValues.Intersect(targetIds).Count();
+                    if (matches == 0)
                         continue;
 
-                    // Compare FK values to every collection's _id values
-                    foreach (var targetCollection in allIds.Keys)
+                    // Compute confidence
+                    double confidence = (double)matches / fkValues.Count;
+
+                    relationships.Add(new Relationship
                     {
-                        var targetIds = allIds[targetCollection];
+                        FromCollection = sourceCollection,
+                        ToCollection = targetCollection,
+                        FieldName = fkField,
+                        Confidence = confidence
+                    });
+                }
+            }
+        }
 
-                        // Count matches
-                        var matches = fkValues.Intersect(targetIds).Count();
-                        if (matches == 0)
-                            continue;
+        return relationships;
+    }
 
-                        // Compute confidence
-                        double confidence = (double)matches / fkValues.Count;
 
-                        relationships.Add(new Relationship
-                        {
-                            FromCollection = sourceCollection,
-                            ToCollection = targetCollection,
-                            FieldName = fkField,
-                            Confidence = confidence
-                        });
+
+      // Helper Methods 
+
+      /// <summary>
+      /// Gets all _id values for each collection in the specified database.
+      /// </summary>
+      /// <param name="databaseName"></param>
+      /// <returns></returns>
+      private async Task<Dictionary<string, List<string>>> GetAllIdsInDatabaseAsync(string databaseName) {
+        var db = _client.GetDatabase(databaseName);
+        var result = new Dictionary<string, List<string>>();
+
+        var collections = await db.ListCollectionNamesAsync();
+        var collectionNames = await collections.ToListAsync();
+
+        foreach (var collectionName in collectionNames)
+        {
+            var ids = new List<string>();
+            var collection = db.GetCollection<BsonDocument>(collectionName);
+
+            var cursor = await collection.Find(FilterDefinition<BsonDocument>.Empty).ToCursorAsync();
+            while (await cursor.MoveNextAsync())
+            {
+                foreach (var doc in cursor.Current)
+                {
+                    var idValue = doc.GetValue("_id", BsonNull.Value);
+                    if (!idValue.IsBsonNull)
+                    {
+                        ids.Add(Util.NormalizeId(idValue));
                     }
                 }
             }
 
-            return relationships;
+            result[collectionName] = ids;
         }
+
+        return result;
+     }
 }

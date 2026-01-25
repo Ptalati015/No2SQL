@@ -241,4 +241,71 @@ public class SchemaAnalyzer
             }
             return result;
         }
+
+        /// <summary>
+        /// Compares Id Like fields to actual _id values to infer relationships in the specified database.
+        /// </summary>
+        /// <param name="databaseName"></param>
+        /// <returns></returns>
+        public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName) {
+            var relationships = new List<Relationship>();
+
+            var allIds = await GetFieldRelationshipsAsync(databaseName);
+
+            var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+
+            var db = _client.GetDatabase(databaseName);
+
+            foreach (var sourceCollection in idLikeFields.Keys)
+            {
+                var fkFields = idLikeFields[sourceCollection];
+                if (fkFields.Count == 0)
+                    continue;
+
+                var collection = db.GetCollection<BsonDocument>(sourceCollection);
+
+                // Sample documents from the source collection
+                var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
+                                                .Limit(200)
+                                                .ToListAsync();
+
+                foreach (var fkField in fkFields)
+                {
+                    // Extract FK values from sample docs
+                    var fkValues = sampleDocs
+                        .Where(d => d.Contains(fkField))
+                        .Select(d => Util.NormalizeId(d.GetValue(fkField)))
+                        .Where(v => v != null)
+                        .Take(100)
+                        .ToList();
+
+                    if (fkValues.Count == 0)
+                        continue;
+
+                    // Compare FK values to every collection's _id values
+                    foreach (var targetCollection in allIds.Keys)
+                    {
+                        var targetIds = allIds[targetCollection];
+
+                        // Count matches
+                        var matches = fkValues.Intersect(targetIds).Count();
+                        if (matches == 0)
+                            continue;
+
+                        // Compute confidence
+                        double confidence = (double)matches / fkValues.Count;
+
+                        relationships.Add(new Relationship
+                        {
+                            FromCollection = sourceCollection,
+                            ToCollection = targetCollection,
+                            FieldName = fkField,
+                            Confidence = confidence
+                        });
+                    }
+                }
+            }
+
+            return relationships;
+        }
 }

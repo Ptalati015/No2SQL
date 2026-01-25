@@ -1,7 +1,7 @@
 using MongoDB.Bson;
-namespace No2SQL.Utils;
-
-public static class Util
+namespace No2SQL.Utils
+{
+    public static class Util
 {
 
     public static string Singularize(string name) {
@@ -19,3 +19,7 @@ public static class Util
     }
 
 }
+    
+}
+
+

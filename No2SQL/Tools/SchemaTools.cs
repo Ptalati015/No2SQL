@@ -69,7 +69,7 @@ internal class SchemaTools
     }
 
     [McpServerTool]
-    [Description("List all Collections and their inferred Foreign Key Like fields on a MongoDB database.")]
+    [Description("List all potential relations on a MongoDB database.")]
     public async Task<string> ListInferredRelationships(
         [Description("Database name")] string databaseName)
     {

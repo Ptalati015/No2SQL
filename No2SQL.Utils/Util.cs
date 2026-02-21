@@ -55,11 +55,11 @@ namespace No2SQL.Utils
 
         public static string DetectPrimaryKeyField(BsonDocument doc)
         {
+            // 1. Domain-specific IDs (teacherId, studentId, chairTeacherId, etc.)
             foreach (var el in doc.Elements)
             {
-                if (el.Name.Equals("teacherId", StringComparison.OrdinalIgnoreCase) ||
-                    el.Name.Equals("studentId", StringComparison.OrdinalIgnoreCase) ||
-                    el.Name.Equals("departmentId", StringComparison.OrdinalIgnoreCase))
+                if (el.Name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) &&
+                    !el.Name.Equals("_id", StringComparison.OrdinalIgnoreCase))
                 {
                     return el.Name;
                 }

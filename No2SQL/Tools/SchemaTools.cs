@@ -69,52 +69,51 @@ internal class SchemaTools
     }
 
     [McpServerTool]
-    [Description("List relations on a MongoDB database.")]
-    public async Task<string> ListInferredRelationships(
-        [Description("Database name")] string databaseName)
+    [Description("List ID-like fields in each collection.")]
+    public async Task<string> ListInferredRelationships(string databaseName)
     {
         try
         {
             var res = await _analyzer.GetFieldRelationshipsAsync(databaseName);
             if (res.Count == 0)
             {
-                return $"No inferred relationships found for database '{databaseName}'.";
+                return $"No ID-like fields found in database '{databaseName}'.";
             }
-            return  $"Inferred Relationships for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(kvp => 
-                    $"- Collection '{kvp.Key}': Foreign Key Like Fields: {string.Join(", ", kvp.Value)}"));
+
+            return $"ID-like fields in '{databaseName}':\n" +
+                string.Join("\n", res.Select(kvp =>
+                    $"- Collection '{kvp.Key}': {string.Join(", ", kvp.Value)}"));
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}");
             Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}\n{ex.StackTrace}");
             return $"Error listing inferred relationships for database '{databaseName}': {ex.Message}";
         }
     }
 
 
-    [McpServerTool]
-    [Description("Compare Fields to infer relationships on a MongoDB database.")]
-    public async Task<string> CompareIdFieldsToIds(
-        [Description("Database name")] string databaseName)
-    {
-        try
-        {
-            var res = await _analyzer.CompareIdFieldsToIdsAsync(databaseName);
-            if (res.Count == 0)
-            {
-                return $"No inferred relationships found by comparing Id Like fields to _id values for database '{databaseName}'.";
-            }
-            return  $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(r => 
-                    $"- From Collection '{r.FromCollection}' To Collection '{r.ToCollection}' " +
-                    $"via Field '{r.FieldName}' with Confidence {r.Confidence:P2}"));
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}");
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}\n{ex.StackTrace}");
-            return $"Error comparing Id Like fields to _id values for database '{databaseName}': {ex.Message}";
-        }
-    }
+    // [McpServerTool]
+    // [Description("Compare Fields to infer relationships on a MongoDB database.")]
+    // public async Task<string> CompareIdFieldsToIds(
+    //     [Description("Database name")] string databaseName)
+    // {
+    //     try
+    //     {
+    //         var res = await _analyzer.CompareIdFieldsToIdsAsync(databaseName);
+    //         if (res.Count == 0)
+    //         {
+    //             return $"No inferred relationships found by comparing Id Like fields to _id values for database '{databaseName}'.";
+    //         }
+    //         return  $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
+    //             string.Join("\n", res.Select(r => 
+    //                 $"- From Collection '{r.FromCollection}' To Collection '{r.ToCollection}' " +
+    //                 $"via Field '{r.FieldName}' with Confidence {r.Confidence:P2}"));
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}");
+    //         Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}\n{ex.StackTrace}");
+    //         return $"Error comparing Id Like fields to _id values for database '{databaseName}': {ex.Message}";
+    //     }
+    // }
 }

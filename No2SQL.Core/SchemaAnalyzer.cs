@@ -216,112 +216,78 @@ public class SchemaAnalyzer
         public async Task<Dictionary<string, List<string>>> GetFieldRelationshipsAsync(string databaseName)
         {
             var result = new Dictionary<string, List<string>>();
-            
-            var relationships = await GetAllIdLikeFieldsAsync(databaseName);
-            if(relationships == null)
-                return result;
-            
-            var collectionsNames = relationships.Keys;
 
-            foreach (var id in relationships.Values)
+            var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+
+            foreach (var kvp in idLikeFields)
             {
-                foreach (var field in id)
-                {
-                    if (!result.ContainsKey(field))
-                    {
-                        result[field] = new List<string>();
-                    }
-                    collectionsNames.ToList().ForEach(cn => {
-                        if (!result[field].Contains(cn))
-                        {
-                            result[field].Add(cn);
-                        }
-                    });
-                }
+                var collectionName = kvp.Key;
+                var fields = kvp.Value.ToList();
+
+                result[collectionName] = fields;
             }
+
             return result;
         }
-
         /// <summary>
         /// Compares Id Like fields to actual _id values to infer relationships in the specified database.
         /// </summary>
         /// <param name="databaseName"></param>
         /// <returns></returns>
-      public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName) {
-        var relationships = new List<Relationship>();
+    //     public async Task<List<Relationship>> InferRelationshipsAsync(string databaseName)
+    //     {
+    //         var relationships = new List<Relationship>();
 
-        // 1. Get all _id values per collection
-        var allIds = await GetAllIdsInDatabaseAsync(databaseName);
+    //         var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+    //         var db = _client.GetDatabase(databaseName);
 
-        // 2. Get all ID-like fields per collection
-        var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+    //         foreach (var sourceCollectionName in idLikeFields.Keys)
+    //         {
+    //             var fkFields = idLikeFields[sourceCollectionName];
+    //             if (!fkFields.Any()) continue;
 
-        var db = _client.GetDatabase(databaseName);
+    //             var sourceCollection = db.GetCollection<BsonDocument>(sourceCollectionName);
 
-        foreach (var sourceCollection in idLikeFields.Keys)
-        {
-            var fkFields = idLikeFields[sourceCollection];
-            if (fkFields.Count == 0)
-                continue;
+    //             // Sample source documents
+    //             var sampleDocs = await sourceCollection
+    //                 .Find(FilterDefinition<BsonDocument>.Empty)
+    //                 .Limit(300)
+    //                 .ToListAsync();
 
-            var collection = db.GetCollection<BsonDocument>(sourceCollection);
+    //             foreach (var fkField in fkFields)
+    //             {
+    //                 var fkValues = ExtractFkValues(sampleDocs, fkField);
+    //                 if (fkValues.Count < 3) continue;
 
-            // Sample documents from the source collection
-            var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                            .Limit(200)
-                                            .ToListAsync();
+    //                 foreach (var targetCollectionName in await db.ListCollectionNames().ToListAsync())
+    //                 {
+    //                     if (targetCollectionName == sourceCollectionName) continue;
+    //                     if (targetCollectionName.StartsWith("embedded_")) continue;
 
-            foreach (var fkField in fkFields)
-            {
-                if (fkField == "_id") {continue;}
-                
+    //                     var targetCollection = db.GetCollection<BsonDocument>(targetCollectionName);
 
-                // Extract FK values from sample docs
-                var fkValues = sampleDocs
-                    .Where(d => d.Contains(fkField))
-                    .Select(d => Util.NormalizeId(d.GetValue(fkField)))
-                    .Where(v => v != null)
-                    .Take(100)
-                    .ToList();
+    //                     var filter = Builders<BsonDocument>.Filter.In("_id", fkValues);
+    //                     var matchCount = await targetCollection.CountDocumentsAsync(filter);
 
-                if (fkValues.Count == 0)
-                    continue;
+    //                     if (matchCount == 0) continue;
 
-                // Compare FK values to every collection's _id values
-                foreach (var targetCollection in allIds.Keys)
-                {
-                    if (sourceCollection == targetCollection) {
-                          continue; // ignore self-relationships
-                    }
-                  
+    //                     var confidence = ComputeConfidence(matchCount, fkValues.Count);
 
-                    if (targetCollection.StartsWith("embedded_")) {
-                        continue; // ignore embedded collections 
-                    }
+    //                     relationships.Add(new Relationship
+    //                     {
+    //                         FromCollection = sourceCollectionName,
+    //                         ToCollection = targetCollectionName,
+    //                         FieldName = fkField,
+    //                         Confidence = confidence,
+    //                         Cardinality = InferCardinality(sampleDocs, fkField)
+    //                     });
+    //                 }
+    //             }
+    //         }
 
-                    var targetIds = allIds[targetCollection];
-                    
-                    // Count matches
-                    var matches = fkValues.Intersect(targetIds).Count();
-                    if (matches == 0)
-                        continue;
+    //         return relationships;
+    // }
 
-                    // Compute confidence
-                    double confidence = (double)matches / fkValues.Count;
-
-                    relationships.Add(new Relationship
-                    {
-                        FromCollection = sourceCollection,
-                        ToCollection = targetCollection,
-                        FieldName = fkField,
-                        Confidence = confidence
-                    });
-                }
-            }
-        }
-
-        return relationships;
-    }
 
 
 

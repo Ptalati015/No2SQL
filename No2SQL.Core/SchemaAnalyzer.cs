@@ -207,6 +207,48 @@ public class SchemaAnalyzer
             return result;
         }
         
+
+        /// <summary>
+        /// Gets all values for fields that look like foreign keys (ending with _id, Id, or ID) in each collection of the specified database.
+        /// </summary>
+        /// <param name="databaseName"></param>
+        /// <returns> A dictionary where the keys are collection names and the values are dictionaries mapping field names to lists of their values. </returns>
+        public async Task<Dictionary<string, Dictionary<string, List<string>>>> GetAllIdLikeFieldValuesAsync(string databaseName)
+        {
+            var db = _client.GetDatabase(databaseName);
+
+            var result = new Dictionary<string, Dictionary<string, List<string>>>();
+
+            var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+
+            foreach (var collectionName in idLikeFields.Keys)
+            {
+                var fields = idLikeFields[collectionName];
+                var collection = db.GetCollection<BsonDocument>(collectionName);
+
+                var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
+                                                .Limit(500)
+                                                .ToListAsync();
+
+                var fieldValues = new Dictionary<string, List<string>>();
+
+                foreach (var field in fields)
+                {
+                    var values = sampleDocs
+                        .Where(d => d.Contains(field))
+                        .Select(d => Util.NormalizeId(d.GetValue(field)))
+                        .Where(v => v != null)
+                        .Distinct()
+                        .ToList();
+
+                    fieldValues[field] = values;
+                }
+
+                result[collectionName] = fieldValues;
+            }
+
+            return result;
+        }
         
         /// <summary>
         /// Gets field relationships for a specific collection in the specified database.
@@ -229,64 +271,71 @@ public class SchemaAnalyzer
 
             return result;
         }
-        /// <summary>
-        /// Compares Id Like fields to actual _id values to infer relationships in the specified database.
-        /// </summary>
-        /// <param name="databaseName"></param>
-        /// <returns></returns>
-    //     public async Task<List<Relationship>> InferRelationshipsAsync(string databaseName)
-    //     {
-    //         var relationships = new List<Relationship>();
+       
+        public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName)
+        {
+            var relationships = new List<Relationship>();
 
-    //         var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
-    //         var db = _client.GetDatabase(databaseName);
+            // 1. Load all primary key values per collection
+            var allIds = await GetAllPrimaryKeysAsync(databaseName);
 
-    //         foreach (var sourceCollectionName in idLikeFields.Keys)
-    //         {
-    //             var fkFields = idLikeFields[sourceCollectionName];
-    //             if (!fkFields.Any()) continue;
+            // // 2. Load all ID-like fields per collection
+            // var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
 
-    //             var sourceCollection = db.GetCollection<BsonDocument>(sourceCollectionName);
+            // 3. Load all values for each ID-like field
+            var idLikeFieldValues = await GetAllIdLikeFieldValuesAsync(databaseName);
 
-    //             // Sample source documents
-    //             var sampleDocs = await sourceCollection
-    //                 .Find(FilterDefinition<BsonDocument>.Empty)
-    //                 .Limit(300)
-    //                 .ToListAsync();
+            foreach (var sourceCollection in idLikeFieldValues.Keys)
+            {
+                var fields = idLikeFieldValues[sourceCollection];
 
-    //             foreach (var fkField in fkFields)
-    //             {
-    //                 var fkValues = ExtractFkValues(sampleDocs, fkField);
-    //                 if (fkValues.Count < 3) continue;
+                foreach (var fkField in fields.Keys)
+                {
+                    // Skip self-id fields
+                    if (fkField == "_id")
+                        continue;
 
-    //                 foreach (var targetCollectionName in await db.ListCollectionNames().ToListAsync())
-    //                 {
-    //                     if (targetCollectionName == sourceCollectionName) continue;
-    //                     if (targetCollectionName.StartsWith("embedded_")) continue;
+                    var fkValues = fields[fkField];
+                    if (fkValues.Count == 0)
+                        continue;
 
-    //                     var targetCollection = db.GetCollection<BsonDocument>(targetCollectionName);
+                    foreach (var targetCollection in allIds.Keys)
+                    {
+                        // Skip self-relationships
+                        if (sourceCollection == targetCollection)
+                            continue;
 
-    //                     var filter = Builders<BsonDocument>.Filter.In("_id", fkValues);
-    //                     var matchCount = await targetCollection.CountDocumentsAsync(filter);
+                        // Skip embedded collections
+                        if (targetCollection.StartsWith("embedded_"))
+                            continue;
 
-    //                     if (matchCount == 0) continue;
+                        var targetIds = allIds[targetCollection];
 
-    //                     var confidence = ComputeConfidence(matchCount, fkValues.Count);
+                        // Count matches
+                        var matches = fkValues.Intersect(targetIds).Count();
+                        if (matches == 0)
+                            continue;
 
-    //                     relationships.Add(new Relationship
-    //                     {
-    //                         FromCollection = sourceCollectionName,
-    //                         ToCollection = targetCollectionName,
-    //                         FieldName = fkField,
-    //                         Confidence = confidence,
-    //                         Cardinality = InferCardinality(sampleDocs, fkField)
-    //                     });
-    //                 }
-    //             }
-    //         }
+                        // Compute confidence
+                        double confidence = (double)matches / fkValues.Count;
 
-    //         return relationships;
-    // }
+                        // Skip weak matches (< 10%)
+                        if (confidence < 0.01)
+                            continue;
+
+                        relationships.Add(new Relationship
+                        {
+                            FromCollection = sourceCollection,
+                            ToCollection = targetCollection,
+                            FieldName = fkField,
+                            Confidence = confidence
+                        });
+                    }
+                }
+            }
+
+            return relationships;
+        }
 
 
 
@@ -328,4 +377,44 @@ public class SchemaAnalyzer
 
         return result;
      }
+      
+      public async Task<Dictionary<string, List<string>>> GetAllPrimaryKeysAsync(string databaseName){
+            var db = _client.GetDatabase(databaseName);
+            var result = new Dictionary<string, List<string>>();
+
+            var collections = await db.ListCollectionNamesAsync();
+            var collectionNames = await collections.ToListAsync();
+
+            foreach (var collectionName in collectionNames)
+            {
+                var collection = db.GetCollection<BsonDocument>(collectionName);
+                var docs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
+                                        .Limit(1000)
+                                        .ToListAsync();
+
+                if (docs.Count == 0)
+                {
+                    result[collectionName] = new List<string>();
+                    continue;
+                }
+
+                var pkField = Util.DetectPrimaryKeyField(docs[0]);
+                if (pkField == null)
+                {
+                    result[collectionName] = new List<string>();
+                    continue;
+                }
+
+                var values = docs
+                    .Where(d => d.Contains(pkField))
+                    .Select(d => Util.NormalizeId(d.GetValue(pkField)))
+                    .Where(v => v != null)
+                    .Distinct()
+                    .ToList();
+
+                result[collectionName] = values;
+            }
+
+            return result;
+        }
 }

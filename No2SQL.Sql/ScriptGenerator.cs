@@ -42,7 +42,9 @@ public class ScriptGenerator
         // 2. Generate foreign keys
         foreach (var rel in relationships)
         {
-            var targetCollection = collections.First(c => c.Name == rel.ToCollection);
+            var targetCollection = collections.Where(c => c.Name == rel.ToCollection).FirstOrDefault();
+            if (targetCollection == null)
+                continue; // Should not happen, but just in case
             var pkField = targetCollection.PrimaryKey;
 
             var fk = GenerateForeignKey(rel, pkField);

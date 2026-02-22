@@ -13,7 +13,23 @@ internal class SchemaTools
         _analyzer = schemaAnalyzer;
         _scriptGenerator = scriptGenerator;
     }
-    
+
+    [McpServerTool]
+    [Description("Test MCP server connectivity.")]
+    public async Task<string> TestConnectivity()
+    {
+        try
+        {
+            
+            return "MCP connectivity test successful!";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in TestConnectivity: {ex.Message}\n{ex.StackTrace}");
+            return $"Error testing connectivity: {ex.Message}";
+        }
+    }
+
     [McpServerTool]
     [Description("Test AnalyzeAsync on a MongoDB database.")]
     public async Task<string> TestAnalyze(
@@ -102,7 +118,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate SQL schema for a MongoDB database.")]
-    public async Task<SqlSchemaOutput> GenerateSqlSchema(
+    public async Task<string> GenerateSqlSchema(
         [Description("Database name")] string databaseName)
     {
         try
@@ -110,16 +126,13 @@ internal class SchemaTools
             var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
             var sqlSchema = _scriptGenerator.GenerateSqlFromInference(collections, relationships);
-            return sqlSchema;
+            return sqlSchema.FullScript;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
-            return new SqlSchemaOutput
-            {
-                ErrorMessage = $"Error generating SQL schema for database '{databaseName}': {ex.Message}"
-            };
+            return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
         }
     }
 }

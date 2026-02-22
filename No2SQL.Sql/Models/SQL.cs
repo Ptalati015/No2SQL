@@ -7,6 +7,7 @@ namespace No2SQL.Sql.Models
         public List<SqlForeignKeyDefinition> ForeignKeys { get; set; } = new();
         public List<SqlIndexDefinition> Indexes { get; set; } = new();
         public string FullScript { get; set; }
+        public string? ErrorMessage { get; set; }
     }
 
     public class SqlTableDefinition

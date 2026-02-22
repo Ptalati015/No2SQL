@@ -29,8 +29,8 @@ public class ScriptGenerator
         // 1. Generate tables
         foreach (var col in collections)
         {
-             if (col.IsEmbedded)
-                 continue;
+            if (col.IsEmbedded)
+                continue;
 
             var table = GenerateCreateTable(
                 col.Name,
@@ -76,6 +76,13 @@ public class ScriptGenerator
 
         return output;
     }
+
+    public SqlSchemaOutput GenerateSqlWithOverrides(List<CollectionSchema> collections, List<Relationship> inferred, List<UserRelationshipOverride> overrides)
+    {
+        var merged = MergeRelationships(inferred, overrides);
+        return GenerateSqlFromInference(collections, merged);
+    }
+
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
     {
@@ -125,7 +132,7 @@ public class ScriptGenerator
             Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
         };
     }
-    
+
     private static SqlForeignKeyDefinition GenerateForeignKey(Relationship rel, string pkField)
     {
         var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";
@@ -146,5 +153,30 @@ public class ScriptGenerator
             ConstraintName = fkName,
             Sql = sql
         };
+    }
+
+    private static List<Relationship> MergeRelationships(List<Relationship> inferred, List<UserRelationshipOverride> overrides)
+    {
+        var result = new List<Relationship>(inferred);
+
+        foreach (var o in overrides)
+        {
+            // Remove any inferred relationship that conflicts
+            result.RemoveAll(r =>
+                r.FromCollection == o.FromCollection &&
+                r.FieldName == o.FromField);
+
+            // Add the override as a 100% confidence relationship
+            result.Add(new Relationship
+            {
+                FromCollection = o.FromCollection,
+                FieldName = o.FromField,
+                ToCollection = o.ToCollection,
+                ToField = o.ToField,
+                Confidence = 1.0
+            });
+        }
+
+        return result;
     }
 }

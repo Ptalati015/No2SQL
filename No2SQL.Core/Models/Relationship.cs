@@ -6,4 +6,5 @@ public class Relationship
     public string ToCollection { get; set; }
     public string FieldName { get; set; }
     public double Confidence { get; set; }
+    public string ToField { get; set; }
 }

@@ -75,7 +75,7 @@ public class ScriptGenerator
         return output;
     }
 
-    private SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
+    private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
     {
         var table = new SqlTableDefinition
         {
@@ -111,7 +111,7 @@ public class ScriptGenerator
         return table;
     }
 
-    private SqlIndexDefinition GenerateIndex(string table, string column)
+    private static SqlIndexDefinition GenerateIndex(string table, string column)
     {
         var indexName = $"idx_{table}_{column}";
 
@@ -123,7 +123,7 @@ public class ScriptGenerator
             Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
         };
     }
-    private SqlForeignKeyDefinition GenerateForeignKey(Relationship rel, string pkField)
+    private static SqlForeignKeyDefinition GenerateForeignKey(Relationship rel, string pkField)
     {
         var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";
 

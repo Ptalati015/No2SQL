@@ -3,6 +3,7 @@ using ModelContextProtocol.Server;
 using No2SQL.Core;
 using No2SQL.Core.Models;
 using No2SQL.Sql;
+using No2SQL.Sql.Models;
 internal class SchemaTools
 {
     private readonly SchemaAnalyzer _analyzer;
@@ -101,7 +102,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate SQL schema for a MongoDB database.")]
-    public async Task<string> GenerateSqlSchema(
+    public async Task<SqlSchemaOutput> GenerateSqlSchema(
         [Description("Database name")] string databaseName)
     {
         try
@@ -109,13 +110,16 @@ internal class SchemaTools
             var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
             var sqlSchema = _scriptGenerator.GenerateSqlFromInference(collections, relationships);
-            return sqlSchema.FullScript;
+            return sqlSchema;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
-            return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
+            return new SqlSchemaOutput
+            {
+                ErrorMessage = $"Error generating SQL schema for database '{databaseName}': {ex.Message}"
+            };
         }
     }
 }

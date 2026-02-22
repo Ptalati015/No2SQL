@@ -5,5 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
+  <ItemGroup>
+    <PackageReference Include="MongoDB.Driver" Version="3.5.2" />
+    <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
+    <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />
+  </ItemGroup>
 </Project>

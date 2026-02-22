@@ -55,32 +55,25 @@ namespace No2SQL.Utils
 
         public static string DetectPrimaryKeyField(BsonDocument doc)
         {
-            // 1. Domain-specific IDs (teacherId, studentId, chairTeacherId, etc.)
+            // 1. If _id exists → always PK
+            if (doc.Contains("_id"))
+                return "_id";
+
+            // 2. Domain-specific IDs (teacherId, studentId, etc.)
             foreach (var el in doc.Elements)
             {
-                if (el.Name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) &&
-                    !el.Name.Equals("_id", StringComparison.OrdinalIgnoreCase))
-                {
+                if (el.Name.EndsWith("Id", StringComparison.OrdinalIgnoreCase))
                     return el.Name;
-                }
             }
 
-            // 2. Generic ID fields
+            // 3. Generic ID fields
             if (doc.Contains("id")) return "id";
             if (doc.Contains("Id")) return "Id";
             if (doc.Contains("ID")) return "ID";
 
-            // 3. Fallback: _id
-            if (doc.Contains("_id")) return "_id";
+            // 4. Fallback: first field
+            return doc.Elements.First().Name;
 
-            // 4. Last fallback: any field ending in "id"
-            foreach (var el in doc.Elements)
-            {
-                if (el.Name.EndsWith("id", StringComparison.OrdinalIgnoreCase))
-                    return el.Name;
-            }
-
-            return null;
 
         }
         public static string InferMySqlType(BsonType type)

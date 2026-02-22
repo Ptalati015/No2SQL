@@ -123,6 +123,7 @@ public class ScriptGenerator
             Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
         };
     }
+    
     private static SqlForeignKeyDefinition GenerateForeignKey(Relationship rel, string pkField)
     {
         var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";

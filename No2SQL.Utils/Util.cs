@@ -83,6 +83,23 @@ namespace No2SQL.Utils
             return null;
 
         }
+        public static string InferMySqlType(BsonType type)
+        {
+            return type switch
+            {
+                BsonType.ObjectId => "VARCHAR(24)",
+                BsonType.String => "TEXT",
+                BsonType.Int32 => "INT",
+                BsonType.Int64 => "BIGINT",
+                BsonType.Double => "DOUBLE",
+                BsonType.Decimal128 => "DECIMAL(38,18)",
+                BsonType.Boolean => "BOOLEAN",
+                BsonType.DateTime => "DATETIME",
+                BsonType.Array => "JSON",
+                BsonType.Document => "JSON",
+                _ => "JSON"
+            };
+        }
     }
 
 }

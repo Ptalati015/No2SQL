@@ -358,7 +358,6 @@ public class SchemaAnalyzer
         {
             var collection = db.GetCollection<BsonDocument>(collectionName);
 
-            // Sample documents (limit to avoid huge scans)
             var docs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
                                        .Limit(300)
                                        .ToListAsync();
@@ -375,31 +374,25 @@ public class SchemaAnalyzer
 
             var schema = new CollectionSchema
             {
-                Name = collectionName
+                Name = collectionName,
+                PrimaryKey = Util.DetectPrimaryKeyField(docs[0])
             };
 
-            // Detect primary key from first document
-            schema.PrimaryKey = Util.DetectPrimaryKeyField(docs[0]);
-
-            // Extract fields + types + nullability + sample values
             foreach (var doc in docs)
             {
                 foreach (var el in doc.Elements)
                 {
                     var field = el.Name;
 
-                    // Track type
                     if (!schema.Fields.ContainsKey(field))
                         schema.Fields[field] = el.Value.BsonType;
 
-                    // Track nullability
                     if (!schema.Nullability.ContainsKey(field))
                         schema.Nullability[field] = false;
 
                     if (el.Value.IsBsonNull)
                         schema.Nullability[field] = true;
 
-                    // Track sample values
                     if (!schema.SampleValues.ContainsKey(field))
                         schema.SampleValues[field] = new List<string>();
 
@@ -409,6 +402,9 @@ public class SchemaAnalyzer
                 }
             }
 
+            // PK must be NOT NULL
+            schema.Nullability[schema.PrimaryKey] = false;
+
             // Mark embedded collections
             schema.IsEmbedded = collectionName.StartsWith("embedded_");
 
@@ -417,7 +413,6 @@ public class SchemaAnalyzer
 
         return result;
     }
-
     // Helper Methods 
 
     /// <summary>

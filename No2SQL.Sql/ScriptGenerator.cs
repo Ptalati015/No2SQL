@@ -29,6 +29,9 @@ public class ScriptGenerator
         // 1. Generate tables
         foreach (var col in collections)
         {
+             if (col.IsEmbedded)
+                 continue;
+
             var table = GenerateCreateTable(
                 col.Name,
                 col.Fields,

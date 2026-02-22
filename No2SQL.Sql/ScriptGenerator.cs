@@ -179,4 +179,26 @@ public class ScriptGenerator
 
         return result;
     }
+
+    private static string ToSqlLiteral(BsonValue value)
+    {
+        if (value.IsBsonNull) return "NULL";
+
+        return value.BsonType switch
+        {
+            BsonType.String => $"'{Escape(value.AsString)}'",
+            BsonType.ObjectId => $"'{value.AsObjectId.ToString()}'",
+            BsonType.Int32 => value.AsInt32.ToString(),
+            BsonType.Int64 => value.AsInt64.ToString(),
+            BsonType.Double => value.AsDouble.ToString(),
+            BsonType.Boolean => value.AsBoolean ? "TRUE" : "FALSE",
+            BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
+            BsonType.Array => $"'{Escape(value.ToJson())}'",
+            BsonType.Document => $"'{Escape(value.ToJson())}'",
+            _ => $"'{Escape(value.ToString())}'"
+        };
+    }
+
+    private static string Escape(string s) => s.Replace("'", "''");
+
 }

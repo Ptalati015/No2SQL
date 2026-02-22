@@ -111,7 +111,7 @@ public class ScriptGenerator
         return table;
     }
 
-    public SqlIndexDefinition GenerateIndex(string table, string column)
+    private SqlIndexDefinition GenerateIndex(string table, string column)
     {
         var indexName = $"idx_{table}_{column}";
 

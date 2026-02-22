@@ -83,11 +83,18 @@ public class ScriptGenerator
         return GenerateSqlFromInference(collections, merged);
     }
 
-    public List<string> GenerateInsertStatementsForCollection(string tableName, List<BsonDocument> documents)
+    public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName)
     {
+         var db = _client.GetDatabase(databaseName);
+        var collection = db.GetCollection<BsonDocument>(collectionName);
+
+        var docs = await collection
+            .Find(FilterDefinition<BsonDocument>.Empty)
+            .ToListAsync();
+
         var inserts = new List<string>();
 
-        foreach (var doc in documents)
+        foreach (var doc in docs)
         {
             var columns = new List<string>();
             var values = new List<string>();
@@ -102,7 +109,7 @@ public class ScriptGenerator
             }
 
             var sql =
-                $"INSERT INTO `{tableName}` ({string.Join(", ", columns)}) " +
+                $"INSERT INTO `{collectionName}` ({string.Join(", ", columns)}) " +
                 $"VALUES ({string.Join(", ", values)});";
 
             inserts.Add(sql);

@@ -20,7 +20,6 @@ builder.Services.AddScoped(sp => new SchemaAnalyzer(mongoConn));
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithTools<RandomNumberTools>()
     .WithTools<SchemaTools>();
 
 await builder.Build().RunAsync();

@@ -83,6 +83,35 @@ public class ScriptGenerator
         return GenerateSqlFromInference(collections, merged);
     }
 
+    public List<string> GenerateInsertStatementsForCollection(string tableName, List<BsonDocument> documents)
+    {
+        var inserts = new List<string>();
+
+        foreach (var doc in documents)
+        {
+            var columns = new List<string>();
+            var values = new List<string>();
+
+            foreach (var el in doc.Elements)
+            {
+                var field = el.Name;
+                var value = el.Value;
+
+                columns.Add($"`{field}`");
+                values.Add(ToSqlLiteral(value));
+            }
+
+            var sql =
+                $"INSERT INTO `{tableName}` ({string.Join(", ", columns)}) " +
+                $"VALUES ({string.Join(", ", values)});";
+
+            inserts.Add(sql);
+        }
+
+        return inserts;
+    }
+
+
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
     {

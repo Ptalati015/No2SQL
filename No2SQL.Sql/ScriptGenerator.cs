@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using No2SQL.Utils;
 using No2SQL.Sql.Models;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 namespace No2SQL.Sql;
 

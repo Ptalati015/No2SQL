@@ -158,26 +158,26 @@ internal class SchemaTools
     }
 
     [McpServerTool]
-[Description("Generate SQL INSERT statements for all documents in a MongoDB collection.")]
-public async Task<List<string>> GenerateSeedersForCollection(
+    [Description("Generate SQL INSERT statements for all documents in a MongoDB collection.")]
+    public async Task<List<string>> GenerateSeedersForCollection(
     [Description("Database name")] string databaseName,
     [Description("Collection name")] string collectionName)
-{
-    try
     {
-       
-        var response = await _scriptGenerator.GenerateInsertStatementsForCollection(databaseName, collectionName);
-        if (response == null || response.Count == 0)
+        try
         {
-            Console.Error.WriteLine($"No documents found in collection '{collectionName}' of database '{databaseName}'.");
-            return [];
+
+            var response = await _scriptGenerator.GenerateInsertStatementsForCollection(databaseName, collectionName);
+            if (response == null || response.Count == 0)
+            {
+                Console.Error.WriteLine($"No documents found in collection '{collectionName}' of database '{databaseName}'.");
+                return [];
+            }
+            return response;
         }
-        return response;
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateSeedersForCollection: {ex}");
+            throw;
+        }
     }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"Error in GenerateSeedersForCollection: {ex}");
-        throw;
-    }
-}
 }

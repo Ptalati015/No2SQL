@@ -2,12 +2,15 @@ using System.ComponentModel;
 using ModelContextProtocol.Server;
 using No2SQL.Core;
 using No2SQL.Core.Models;
+using No2SQL.Sql;
 internal class SchemaTools
 {
     private readonly SchemaAnalyzer _analyzer;
-    public SchemaTools(SchemaAnalyzer schemaAnalyzer)
+    private readonly ScriptGenerator _scriptGenerator;
+    public SchemaTools(SchemaAnalyzer schemaAnalyzer, ScriptGenerator scriptGenerator)
     {
         _analyzer = schemaAnalyzer;
+        _scriptGenerator = scriptGenerator;
     }
     
     [McpServerTool]

@@ -277,11 +277,11 @@ public class SchemaAnalyzer
     }
 
     /// <summary>
-    /// Compares ID-like fields to actual _id values across collections to find potential relationships, and computes confidence scores for each relationship.
+    /// Gets all relationships by comparing ID-like fields to actual _id values across collections in the specified database.
     /// </summary>
     /// <param name="databaseName"></param>
     /// <returns></returns>
-    public async Task<List<Relationship>> CompareIdFieldsToIdsAsync(string databaseName)
+    public async Task<List<Relationship>> GetRelationshipsAsync(string databaseName)
     {
         var relationships = new List<Relationship>();
 

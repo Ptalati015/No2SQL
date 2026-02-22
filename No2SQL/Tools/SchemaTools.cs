@@ -20,7 +20,7 @@ internal class SchemaTools
     {
         try
         {
-            
+
             return "MCP connectivity test successful!";
         }
         catch (Exception ex)
@@ -38,8 +38,8 @@ internal class SchemaTools
         try
         {
             var res = await _analyzer.AnalyzeAsync(databaseName);
-            return  $"Schema analysis for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(kvp => 
+            return $"Schema analysis for database '{databaseName}':\n" +
+                string.Join("\n", res.Select(kvp =>
                     $"- Collection '{kvp.Key}': Fields: {string.Join(", ", kvp.Value)}"));
         }
         catch (Exception ex)
@@ -103,8 +103,8 @@ internal class SchemaTools
             {
                 return $"No inferred relationships found by comparing Id Like fields to _id values for database '{databaseName}'.";
             }
-            return  $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(r => 
+            return $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
+                string.Join("\n", res.Select(r =>
                     $"- {r.FromCollection}' -> To Collection '{r.ToCollection}' " +
                     $"via Field '{r.FieldName}' ({r.Confidence:P2})"));
         }
@@ -133,6 +133,27 @@ internal class SchemaTools
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
             return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
+        }
+    }
+
+    [McpServerTool]
+    [Description("Generate SQL schema with optional user-provided relationships.")]
+    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride> overrides = null)
+    {
+        try
+        {
+            var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var inferred = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            if (overrides == null || overrides.Count == 0)
+                return _scriptGenerator.GenerateSqlFromInference(collections, inferred);
+
+            return _scriptGenerator.GenerateSqlWithOverrides(collections, inferred, overrides);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateSqlSchemaAdvanced: {ex}");
+            throw;
         }
     }
 }

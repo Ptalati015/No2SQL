@@ -1,0 +1,145 @@
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
+using No2SQL.Core.Models;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using No2SQL.Utils;
+using No2SQL.Sql.Models;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+namespace No2SQL.Sql;
+
+public class ScriptGenerator
+{
+    private readonly MongoClient _client;
+
+    public ScriptGenerator(string connectionString)
+    {
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
+        }
+        _client = new MongoClient(connectionString);
+    }
+
+    public SqlSchemaOutput GenerateSqlFromInference(List<CollectionSchema> collections, List<Relationship> relationships)
+    {
+        var output = new SqlSchemaOutput();
+
+        // 1. Generate tables
+        foreach (var col in collections)
+        {
+            var table = GenerateCreateTable(
+                col.Name,
+                col.Fields,
+                col.PrimaryKey
+            );
+
+            output.Tables.Add(table);
+        }
+
+        // 2. Generate foreign keys
+        foreach (var rel in relationships)
+        {
+            var targetCollection = collections.First(c => c.Name == rel.ToCollection);
+            var pkField = targetCollection.PrimaryKey;
+
+            var fk = GenerateForeignKey(rel, pkField);
+            output.ForeignKeys.Add(fk);
+
+            // 3. Generate index for FK
+            var index = GenerateIndex(rel.FromCollection, rel.FieldName);
+            output.Indexes.Add(index);
+        }
+
+        // 4. Build full script
+        var sb = new StringBuilder();
+
+        sb.AppendLine("-- TABLES");
+        foreach (var t in output.Tables)
+            sb.AppendLine(t.CreateTableSql + "\n");
+
+        sb.AppendLine("-- FOREIGN KEYS");
+        foreach (var fk in output.ForeignKeys)
+            sb.AppendLine(fk.Sql + "\n");
+
+        sb.AppendLine("-- INDEXES");
+        foreach (var idx in output.Indexes)
+            sb.AppendLine(idx.Sql + "\n");
+
+        output.FullScript = sb.ToString();
+
+        return output;
+    }
+
+    private SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
+    {
+        var table = new SqlTableDefinition
+        {
+            TableName = collectionName,
+            PrimaryKey = primaryKey
+        };
+
+        var columnSql = new List<string>();
+
+        foreach (var field in fields)
+        {
+            var sqlType = Util.InferMySqlType(field.Value);
+
+            table.Columns.Add(new SqlColumnDefinition
+            {
+                Name = field.Key,
+                SqlType = sqlType,
+                IsNullable = field.Key != primaryKey
+            });
+
+            columnSql.Add(
+                $"  `{field.Key}` {sqlType} {(field.Key == primaryKey ? "NOT NULL" : "")}"
+            );
+        }
+
+        columnSql.Add($"  PRIMARY KEY (`{primaryKey}`)");
+
+        table.CreateTableSql =
+                $@"CREATE TABLE `{collectionName}` (
+            {string.Join(",\n", columnSql)}
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+
+        return table;
+    }
+
+    public SqlIndexDefinition GenerateIndex(string table, string column)
+    {
+        var indexName = $"idx_{table}_{column}";
+
+        return new SqlIndexDefinition
+        {
+            Table = table,
+            Column = column,
+            IndexName = indexName,
+            Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
+        };
+    }
+    private SqlForeignKeyDefinition GenerateForeignKey(Relationship rel, string pkField)
+    {
+        var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";
+
+        var sql =
+            $@"ALTER TABLE `{rel.FromCollection}`
+        ADD CONSTRAINT `{fkName}`
+        FOREIGN KEY (`{rel.FieldName}`)
+        REFERENCES `{rel.ToCollection}`(`{pkField}`)
+        ON DELETE SET NULL;";
+
+        return new SqlForeignKeyDefinition
+        {
+            FromTable = rel.FromCollection,
+            FromColumn = rel.FieldName,
+            ToTable = rel.ToCollection,
+            ToColumn = pkField,
+            ConstraintName = fkName,
+            Sql = sql
+        };
+    }
+}

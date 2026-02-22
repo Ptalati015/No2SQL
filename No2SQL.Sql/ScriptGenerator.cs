@@ -14,7 +14,7 @@ public class ScriptGenerator
 {
     private readonly MongoClient _client;
 
-    public ScriptGenerator(string connectionString)
+    public ScriptGenerator(string? connectionString)
     {
         if (string.IsNullOrEmpty(connectionString))
         {

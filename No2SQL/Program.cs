@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using No2SQL.Core;
+using No2SQL.Sql;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -14,6 +15,7 @@ var mongoConn = builder.Configuration.GetConnectionString("MongoDb")
     ?? Environment.GetEnvironmentVariable("NO2SQL_MONGO");
 
 builder.Services.AddScoped(sp => new SchemaAnalyzer(mongoConn));
+builder.Services.AddScoped(sp => new ScriptGenerator(mongoConn));
 
 
 // Add the MCP services: the transport to use (stdio) and the tools to register.

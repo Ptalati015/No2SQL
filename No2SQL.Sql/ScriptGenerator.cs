@@ -85,7 +85,7 @@ public class ScriptGenerator
 
     public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName)
     {
-         var db = _client.GetDatabase(databaseName);
+        var db = _client.GetDatabase(databaseName);
         var collection = db.GetCollection<BsonDocument>(collectionName);
 
         var docs = await collection
@@ -101,21 +101,22 @@ public class ScriptGenerator
 
             foreach (var el in doc.Elements)
             {
-                var field = el.Name;
-                var value = el.Value;
-
-                columns.Add($"`{field}`");
-                values.Add(ToSqlLiteral(value));
+                columns.Add($"    `{el.Name}`");
+                values.Add($"    {ToSqlLiteral(el.Value)}");
             }
 
             var sql =
-                $"INSERT INTO `{collectionName}` ({string.Join(", ", columns)}) " +
-                $"VALUES ({string.Join(", ", values)});";
+                    $@"INSERT INTO `{collectionName}` (
+                {string.Join(",\n", columns)}
+                ) VALUES (
+                {string.Join(",\n", values)}
+                );";
 
             inserts.Add(sql);
         }
 
         return inserts;
+
     }
 
 

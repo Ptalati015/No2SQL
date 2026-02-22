@@ -81,7 +81,7 @@ internal class SchemaTools
     {
         try
         {
-            var res = await _analyzer.CompareIdFieldsToIdsAsync(databaseName);
+            var res = await _analyzer.GetRelationshipsAsync(databaseName);
             if (res.Count == 0)
             {
                 return $"No inferred relationships found by comparing Id Like fields to _id values for database '{databaseName}'.";
@@ -99,4 +99,23 @@ internal class SchemaTools
         }
     }
 
+    [McpServerTool]
+    [Description("Generate SQL schema for a MongoDB database.")]
+    public async Task<string> GenerateSqlSchema(
+        [Description("Database name")] string databaseName)
+    {
+        try
+        {
+            var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+            var sqlSchema = _scriptGenerator.GenerateSqlFromInference(collections, relationships);
+            return sqlSchema.FullScript;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
+            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
+            return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
+        }
+    }
 }

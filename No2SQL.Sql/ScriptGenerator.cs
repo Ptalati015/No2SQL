@@ -221,19 +221,41 @@ public class ScriptGenerator
     {
         if (value.IsBsonNull) return "NULL";
 
-        return value.BsonType switch
+        switch (value.BsonType)
         {
-            BsonType.String => $"'{Escape(value.AsString)}'",
-            BsonType.ObjectId => $"'{value.AsObjectId.ToString()}'",
-            BsonType.Int32 => value.AsInt32.ToString(),
-            BsonType.Int64 => value.AsInt64.ToString(),
-            BsonType.Double => value.AsDouble.ToString(),
-            BsonType.Boolean => value.AsBoolean ? "TRUE" : "FALSE",
-            BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
-            BsonType.Array => $"'{Escape(value.ToJson())}'",
-            BsonType.Document => $"'{Escape(value.ToJson())}'",
-            _ => $"'{Escape(value.ToString())}'"
-        };
+            case BsonType.String:
+                return $"'{Escape(value.AsString)}'";
+
+            case BsonType.ObjectId:
+                return $"'{value.AsObjectId.ToString()}'";
+
+            case BsonType.Int32:
+                return value.AsInt32.ToString();
+
+            case BsonType.Int64:
+                return value.AsInt64.ToString();
+
+            case BsonType.Double:
+                return value.AsDouble.ToString();
+
+            case BsonType.Boolean:
+                return value.AsBoolean ? "TRUE" : "FALSE";
+
+            case BsonType.DateTime:
+                return $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'";
+
+            case BsonType.Array:
+            case BsonType.Document:
+                var prettyJson = value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
+                {
+                    Indent = true,
+                    IndentChars = "    "
+                });
+                return $"'{Escape(prettyJson)}'";
+
+            default:
+                return $"'{Escape(value.ToString())}'";
+        }
     }
 
     private static string Escape(string s) => s.Replace("'", "''");

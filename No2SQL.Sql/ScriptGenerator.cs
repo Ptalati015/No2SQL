@@ -92,30 +92,38 @@ public class ScriptGenerator
             .Find(FilterDefinition<BsonDocument>.Empty)
             .ToListAsync();
 
-        var inserts = new List<string>();
+        // Extract columns from the first document
+        var columns = docs.First().Elements
+            .Select(e => $"    `{e.Name}`")
+            .ToList();
+
+        var valueBlocks = new List<string>();
 
         foreach (var doc in docs)
         {
-            var columns = new List<string>();
             var values = new List<string>();
 
             foreach (var el in doc.Elements)
             {
-                columns.Add($"    `{el.Name}`");
                 values.Add($"    {ToSqlLiteral(el.Value)}");
             }
 
-            var sql =
-                    $@"INSERT INTO `{collectionName}` (
-                {string.Join(",\n", columns)}
-                ) VALUES (
-                {string.Join(",\n", values)}
-                );";
-
-            inserts.Add(sql);
+            var block =
+                $@"(
+                    {string.Join(",\n", values)}
+                    )";
+            valueBlocks.Add(block);
         }
 
-        return inserts;
+        var sql =
+            $@"INSERT INTO `{collectionName}` (
+            {string.Join(",\n", columns)}
+            ) VALUES
+            {string.Join(",\n,\n", valueBlocks)}
+        ;";
+
+        return [NormalizeIndentation(sql)];
+
 
     }
 
@@ -258,6 +266,22 @@ public class ScriptGenerator
         }
     }
 
+    private static string NormalizeIndentation(string sql)
+    {
+        var lines = sql.Split('\n');
+
+        // Find minimum indentation across non-empty lines
+        var minIndent = lines
+            .Where(l => l.Trim().Length > 0)
+            .Select(l => l.TakeWhile(Char.IsWhiteSpace).Count())
+            .DefaultIfEmpty(0)
+            .Min();
+
+        // Remove that indentation from all lines
+        return string.Join("\n", lines.Select(l =>
+            l.Length >= minIndent ? l[minIndent..] : l
+        ));
+    }
     private static string Escape(string s) => s.Replace("'", "''");
 
 }

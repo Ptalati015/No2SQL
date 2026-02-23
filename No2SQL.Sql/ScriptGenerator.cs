@@ -92,8 +92,8 @@ public class ScriptGenerator
             .Find(FilterDefinition<BsonDocument>.Empty)
             .ToListAsync();
 
-        if (!docs.Any())
-            return new List<string>();
+        if (docs.Count == 0)
+            return [];
 
         // Collect all unique columns across all documents
         var allColumns = docs

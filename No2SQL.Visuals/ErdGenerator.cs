@@ -22,4 +22,36 @@ public class ErdGenerator
         _client = new MongoClient(connectionString);
     }
 
+    public string GenerateMermaidFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("erDiagram");
+
+        foreach (var schema in schemas.Where(s => !s.IsEmbedded))
+        {
+            sb.AppendLine($"    {schema.Name} {{");
+
+            foreach (var field in schema.Fields)
+            {
+                var name = field.Key;
+                var type = field.Value.ToString();
+                var pk = schema.PrimaryKey == name ? " PK" : "";
+                var nullable = schema.Nullability.TryGetValue(name, out var n) && n ? "?" : "";
+
+                sb.AppendLine($"        {type} {name}{nullable}{pk}");
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        foreach (var rel in relationships)
+        {
+            sb.AppendLine(
+                $"    {rel.FromCollection} ||--o{{ {rel.ToCollection} : \"{rel.FieldName} → {rel.ToField}\"");
+        }
+
+        return sb.ToString().Trim() + "\n";
+    }
+
 }

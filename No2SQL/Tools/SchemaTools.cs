@@ -4,14 +4,17 @@ using No2SQL.Core;
 using No2SQL.Core.Models;
 using No2SQL.Sql;
 using No2SQL.Sql.Models;
+using No2SQL.Visuals;
 internal class SchemaTools
 {
     private readonly SchemaAnalyzer _analyzer;
     private readonly ScriptGenerator _scriptGenerator;
-    public SchemaTools(SchemaAnalyzer schemaAnalyzer, ScriptGenerator scriptGenerator)
+    private readonly ErdGenerator _erdGenerator;
+    public SchemaTools(SchemaAnalyzer schemaAnalyzer, ScriptGenerator scriptGenerator, ErdGenerator erdGenerator)
     {
         _analyzer = schemaAnalyzer;
         _scriptGenerator = scriptGenerator;
+        _erdGenerator = erdGenerator;
     }
 
     [McpServerTool]
@@ -180,4 +183,5 @@ internal class SchemaTools
             throw;
         }
     }
+   
 }

@@ -7,8 +7,9 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="MongoDB.Driver" Version="3.5.2" />
-    <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
     <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />
+    <ProjectReference Include="..\No2SQL.Sql\No2SQL.Sql.csproj" />
+    <ProjectReference Include="..\No2SQL.Visuals\No2SQL.Visuals.csproj" />
+    <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
   </ItemGroup>
 </Project>

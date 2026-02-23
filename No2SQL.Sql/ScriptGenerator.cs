@@ -92,42 +92,53 @@ public class ScriptGenerator
             .Find(FilterDefinition<BsonDocument>.Empty)
             .ToListAsync();
 
-        // Extract columns from the first document
-        var columns = docs.First().Elements
-            .Select(e => $"    `{e.Name}`")
+        if (!docs.Any())
+            return new List<string>();
+
+        // Collect all unique columns across all documents
+        var allColumns = docs
+            .SelectMany(d => d.Elements.Select(e => e.Name))
+            .Distinct()
             .ToList();
 
+        // Format column list
+        var columnSql = allColumns
+            .Select(c => $"    `{c}`")
+            .ToList();
+
+        // Build VALUES blocks
         var valueBlocks = new List<string>();
 
         foreach (var doc in docs)
         {
-            var values = new List<string>();
+            var rowValues = new List<string>();
 
-            foreach (var el in doc.Elements)
+            foreach (var col in allColumns)
             {
-                values.Add($"    {ToSqlLiteral(el.Value)}");
+                if (doc.Contains(col))
+                    rowValues.Add($"    {ToSqlLiteralPretty(doc[col])}");
+                else
+                    rowValues.Add("    NULL");
             }
 
             var block =
-                $@"(
-                    {string.Join(",\n", values)}
-                    )";
+    $@"(
+{string.Join(",\n", rowValues)}
+)";
             valueBlocks.Add(block);
         }
 
+        // Final SQL
         var sql =
-            $@"INSERT INTO `{collectionName}` (
-            {string.Join(",\n", columns)}
-            ) VALUES
-            {string.Join(",\n,\n", valueBlocks)}
-        ;";
+    $@"INSERT INTO `{collectionName}` (
+{string.Join(",\n", columnSql)}
+) VALUES
+{string.Join(",\n,\n", valueBlocks)}
+;
+";
 
-        return [NormalizeIndentation(sql)];
-
-
+        return new List<string> { NormalizeIndentation(sql) };
     }
-
-
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
     {
@@ -225,62 +236,48 @@ public class ScriptGenerator
         return result;
     }
 
-    private static string ToSqlLiteral(BsonValue value)
+    private static string ToSqlLiteralPretty(BsonValue value)
     {
         if (value.IsBsonNull) return "NULL";
 
-        switch (value.BsonType)
+        return value.BsonType switch
         {
-            case BsonType.String:
-                return $"'{Escape(value.AsString)}'";
+            BsonType.String => $"'{Escape(value.AsString)}'",
+            BsonType.ObjectId => $"'{value.AsObjectId.ToString()}'",
+            BsonType.Int32 => value.AsInt32.ToString(),
+            BsonType.Int64 => value.AsInt64.ToString(),
+            BsonType.Double => value.AsDouble.ToString(),
+            BsonType.Boolean => value.AsBoolean ? "TRUE" : "FALSE",
+            BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
 
-            case BsonType.ObjectId:
-                return $"'{value.AsObjectId.ToString()}'";
-
-            case BsonType.Int32:
-                return value.AsInt32.ToString();
-
-            case BsonType.Int64:
-                return value.AsInt64.ToString();
-
-            case BsonType.Double:
-                return value.AsDouble.ToString();
-
-            case BsonType.Boolean:
-                return value.AsBoolean ? "TRUE" : "FALSE";
-
-            case BsonType.DateTime:
-                return $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'";
-
-            case BsonType.Array:
-            case BsonType.Document:
-                var prettyJson = value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
+            BsonType.Array or BsonType.Document =>
+                $"'{Escape(value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
                 {
                     Indent = true,
                     IndentChars = "    "
-                });
-                return $"'{Escape(prettyJson)}'";
+                }))}'",
 
-            default:
-                return $"'{Escape(value.ToString())}'";
-        }
+            _ => $"'{Escape(value.ToString())}'"
+        };
     }
 
     private static string NormalizeIndentation(string sql)
     {
-        var lines = sql.Split('\n');
+        var lines = sql.Replace("\r", "").Split('\n');
 
-        // Find minimum indentation across non-empty lines
         var minIndent = lines
             .Where(l => l.Trim().Length > 0)
             .Select(l => l.TakeWhile(Char.IsWhiteSpace).Count())
             .DefaultIfEmpty(0)
             .Min();
 
-        // Remove that indentation from all lines
-        return string.Join("\n", lines.Select(l =>
+        var normalized = string.Join("\n", lines.Select(l =>
             l.Length >= minIndent ? l[minIndent..] : l
         ));
+
+        return normalized.Trim() + "\n";
+
+
     }
     private static string Escape(string s) => s.Replace("'", "''");
 

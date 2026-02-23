@@ -9,7 +9,17 @@ using No2SQL.Sql.Models;
 using System.Text;
 namespace No2SQL.Visuals;
 
-public class Class1
+public class ErdGenerator
 {
+    private readonly MongoClient _client;
+
+    public ErdGenerator(string? connectionString)
+    {
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
+        }
+        _client = new MongoClient(connectionString);
+    }
 
 }

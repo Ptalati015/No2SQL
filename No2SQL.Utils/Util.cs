@@ -93,6 +93,20 @@ namespace No2SQL.Utils
                 _ => "JSON"
             };
         }
+
+        public static string MapBsonType(BsonType t) => t switch
+        {
+            BsonType.String => "string",
+            BsonType.ObjectId => "objectId",
+            BsonType.Int32 => "int",
+            BsonType.Int64 => "long",
+            BsonType.Double => "double",
+            BsonType.Boolean => "bool",
+            BsonType.DateTime => "datetime",
+            BsonType.Array => "array",
+            BsonType.Document => "document",
+            _ => t.ToString()
+        };
     }
 
 }

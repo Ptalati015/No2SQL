@@ -34,7 +34,7 @@ public class ErdGenerator
             foreach (var field in schema.Fields)
             {
                 var name = field.Key;
-                var type = field.Value.ToString();
+                var type = Util.MapBsonType(field.Value);
                 var pk = schema.PrimaryKey == name ? " PK" : "";
                 var nullable = schema.Nullability.TryGetValue(name, out var n) && n ? "?" : "";
 
@@ -47,9 +47,15 @@ public class ErdGenerator
 
         foreach (var rel in relationships)
         {
+            var toField = string.IsNullOrWhiteSpace(rel.ToField)
+                ? "_id"
+                : rel.ToField;
+
+            // ToCollection = parent (one), FromCollection = child (many)
             sb.AppendLine(
-                $"    {rel.FromCollection} ||--o{{ {rel.ToCollection} : \"{rel.FieldName} → {rel.ToField}\"");
+                $"    {rel.ToCollection} ||--o{{ {rel.FromCollection} : \"{rel.FieldName} → {toField}\"");
         }
+
 
         return sb.ToString().Trim() + "\n";
     }

@@ -183,5 +183,22 @@ internal class SchemaTools
             throw;
         }
     }
-   
+    [McpServerTool]
+    [Description("Generate a Mermaid ER diagram from MongoDB inference for a given database.")]
+    public async Task<string> GenerateMongoErdMermaid(
+     [Description("Database name")] string databaseName)
+    {
+        try
+        {
+            var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            return _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateMongoErdMermaid: {ex}");
+            return $"Error generating ERD: {ex.Message}";
+        }
+    }
 }

@@ -60,4 +60,47 @@ public class ErdGenerator
         return sb.ToString().Trim() + "\n";
     }
 
+    public string GeneratePlantUmlFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("@startuml");
+        sb.AppendLine();
+
+        // Render entities
+        foreach (var schema in schemas.Where(s => !s.IsEmbedded))
+        {
+            sb.AppendLine($"entity {schema.Name} {{");
+
+            foreach (var field in schema.Fields)
+            {
+                var name = field.Key;
+                var type = Util.MapBsonType(field.Value);
+                var pk = schema.PrimaryKey == name ? "*" : "";
+                var nullable = schema.Nullability.TryGetValue(name, out var n) && n ? "?" : "";
+
+                sb.AppendLine($"        {pk} {name}{nullable} : {type}");
+            }
+
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        // Render relationships
+        foreach (var rel in relationships)
+        {
+            var toField = string.IsNullOrWhiteSpace(rel.ToField)
+                ? "_id"
+                : rel.ToField;
+
+            // Parent = ToCollection, Child = FromCollection
+            sb.AppendLine(
+                $"{rel.ToCollection} ||--o{{ {rel.FromCollection} : {rel.FieldName} → {toField}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("@enduml");
+
+        return sb.ToString().Trim() + "\n";
+    }
+
 }

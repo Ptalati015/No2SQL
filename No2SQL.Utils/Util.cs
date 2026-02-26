@@ -107,6 +107,25 @@ namespace No2SQL.Utils
             BsonType.Document => "document",
             _ => t.ToString()
         };
+
+        public static string MapSqlType(string sqlType)
+        {
+            sqlType = sqlType.ToUpperInvariant();
+
+            if (sqlType.StartsWith("VARCHAR")) return "string";
+            if (sqlType.StartsWith("CHAR")) return "string";
+            if (sqlType.StartsWith("TEXT")) return "string";
+            if (sqlType.StartsWith("INT")) return "int";
+            if (sqlType.StartsWith("BIGINT")) return "long";
+            if (sqlType.StartsWith("BOOLEAN")) return "bool";
+            if (sqlType.StartsWith("DATETIME")) return "datetime";
+            if (sqlType.StartsWith("JSON")) return "json";
+            if (sqlType.StartsWith("DOUBLE")) return "double";
+            if (sqlType.StartsWith("FLOAT")) return "float";
+            if (sqlType.StartsWith("DECIMAL")) return "decimal";
+
+            return sqlType.ToLower();
+        }
     }
 
 }

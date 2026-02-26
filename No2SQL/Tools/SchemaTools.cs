@@ -238,4 +238,43 @@ internal class SchemaTools
             return $"Error generating ERD: {ex.Message}";
         }
     }
+
+    [McpServerTool]
+    [Description("Generate a Mermaid ER diagram. Source can be auto, mongo, or sql.")]
+    public async Task<string> GenerateErdMermaid(
+    string databaseName,
+    string source = "auto")
+    {
+        try
+        {
+            var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            var useSql = source.ToLower() switch
+            {
+                "sql" => true,
+                "mongo" => false,
+                "auto" => true,
+                _ => true
+            };
+
+            if (useSql)
+            {
+                var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
+
+                if (sql.ErrorMessage == null)
+                    return _erdGenerator.GenerateMermaidFromSql(sql);
+
+                if (source == "sql")
+                    return $"SQL ERD failed: {sql.ErrorMessage}";
+            }
+
+            return _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
+        }
+        catch (Exception ex)
+        {
+            return $"Error generating Mermaid ERD: {ex.Message}";
+        }
+    }
+
 }

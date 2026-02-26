@@ -106,45 +106,80 @@ public class ErdGenerator
     }
 
     public string GenerateGraphVizFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
-{
-    var sb = new StringBuilder();
-    sb.AppendLine("digraph ERD {");
-    sb.AppendLine("    rankdir=LR;");
-    sb.AppendLine("    node [shape=record, fontsize=10, fontname=\"Consolas\"];");
-    sb.AppendLine();
-
-    // Render nodes
-    foreach (var schema in schemas.Where(s => !s.IsEmbedded))
     {
-        sb.AppendLine($"    {schema.Name} [label=\"{{{schema.Name}|");
+        var sb = new StringBuilder();
+        sb.AppendLine("digraph ERD {");
+        sb.AppendLine("    rankdir=LR;");
+        sb.AppendLine("    node [shape=record, fontsize=10, fontname=\"Consolas\"];");
+        sb.AppendLine();
 
-        foreach (var field in schema.Fields)
+        // Render nodes
+        foreach (var schema in schemas.Where(s => !s.IsEmbedded))
         {
-            var name = field.Key;
-            var type = Util.MapBsonType(field.Value);
-            var pk = schema.PrimaryKey == name ? "*" : "";
-            var nullable = schema.Nullability.TryGetValue(name, out var n) && n ? "?" : "";
+            sb.AppendLine($"    {schema.Name} [label=\"{{{schema.Name}|");
 
-            sb.AppendLine($"        {pk}{name}{nullable} : {type}\\l");
+            foreach (var field in schema.Fields)
+            {
+                var name = field.Key;
+                var type = Util.MapBsonType(field.Value);
+                var pk = schema.PrimaryKey == name ? "*" : "";
+                var nullable = schema.Nullability.TryGetValue(name, out var n) && n ? "?" : "";
+
+                sb.AppendLine($"        {pk}{name}{nullable} : {type}\\l");
+            }
+
+            sb.AppendLine("    }}\"];");
+            sb.AppendLine();
         }
 
-        sb.AppendLine("    }}\"];");
-        sb.AppendLine();
+        // Render edges
+        foreach (var rel in relationships)
+        {
+            var toField = string.IsNullOrWhiteSpace(rel.ToField)
+                ? "_id"
+                : rel.ToField;
+
+            sb.AppendLine(
+                $"    {rel.ToCollection} -> {rel.FromCollection} [label=\"{rel.FieldName} → {toField}\"];");
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString().Trim() + "\n";
     }
 
-    // Render edges
-    foreach (var rel in relationships)
+    public string GenerateMermaidFromSql(SqlSchemaOutput sql)
     {
-        var toField = string.IsNullOrWhiteSpace(rel.ToField)
-            ? "_id"
-            : rel.ToField;
+        var sb = new StringBuilder();
+        sb.AppendLine("erDiagram");
 
-        sb.AppendLine(
-            $"    {rel.ToCollection} -> {rel.FromCollection} [label=\"{rel.FieldName} → {toField}\"];");
+        // Render tables
+        foreach (var table in sql.Tables)
+        {
+            var tableName = table.TableName; // keep original casing or normalize if you prefer
+
+            sb.AppendLine($"    {tableName} {{");
+
+            foreach (var col in table.Columns)
+            {
+                var type = Util.MapSqlType(col.SqlType);
+                var pk = table.PrimaryKey == col.Name ? " PK" : "";
+                var nullable = col.IsNullable ? "?" : "";
+
+                sb.AppendLine($"        {type} {col.Name}{nullable}{pk}");
+            }
+
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        // Render foreign keys
+        foreach (var fk in sql.ForeignKeys)
+        {
+            sb.AppendLine(
+                $"    {fk.ToTable} ||--o{{ {fk.FromTable} : \"{fk.FromColumn} → {fk.ToColumn}\"");
+        }
+
+        return sb.ToString().Trim() + "\n";
     }
-
-    sb.AppendLine("}");
-    return sb.ToString().Trim() + "\n";
 }
 
-}

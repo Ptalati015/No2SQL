@@ -181,5 +181,48 @@ public class ErdGenerator
 
         return sb.ToString().Trim() + "\n";
     }
+
+    public string GeneratePlantUmlFromSql(SqlSchemaOutput sql)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("@startuml");
+        sb.AppendLine();
+
+        // Render entities (tables)
+        foreach (var table in sql.Tables)
+        {
+            var tableName = table.TableName;
+
+            sb.AppendLine($"entity {tableName} {{");
+
+            foreach (var col in table.Columns)
+            {
+                var type = Util.MapSqlType(col.SqlType);
+                var pk = table.PrimaryKey == col.Name ? "*" : "";
+                var nullable = col.IsNullable ? "?" : "";
+
+                sb.AppendLine($"        {pk} {col.Name}{nullable} : {type}");
+            }
+
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        // Render relationships (foreign keys)
+        foreach (var fk in sql.ForeignKeys)
+        {
+            var toField = string.IsNullOrWhiteSpace(fk.ToColumn)
+                ? "_id"
+                : fk.ToColumn;
+
+            sb.AppendLine(
+                $"{fk.ToTable} ||--o{{ {fk.FromTable} : {fk.FromColumn} → {toField}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("@enduml");
+
+        return sb.ToString().Trim() + "\n";
+    }
 }
 

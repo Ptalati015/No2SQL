@@ -241,9 +241,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a Mermaid ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdMermaid(
-    string databaseName,
-    string source = "auto")
+    public async Task<string> GenerateErdMermaid(string databaseName, string source = "auto")
     {
         try
         {
@@ -277,4 +275,41 @@ internal class SchemaTools
         }
     }
 
+    [McpServerTool]
+    [Description("Generate a PlantUML ER diagram. Source can be auto, mongo, or sql.")]
+    public async Task<string> GenerateErdPlantUml(
+    string databaseName,
+    string source = "auto")
+    {
+        try
+        {
+            var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            var useSql = source.ToLower() switch
+            {
+                "sql" => true,
+                "mongo" => false,
+                "auto" => true,
+                _ => true
+            };
+
+            if (useSql)
+            {
+                var sql =  _scriptGenerator.GenerateSqlFromInference(schemas,relationships);
+
+                if (sql.ErrorMessage == null)
+                    return _erdGenerator.GeneratePlantUmlFromSql(sql);
+
+                if (source == "sql")
+                    return $"SQL ERD failed: {sql.ErrorMessage}";
+            }
+
+            return _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
+        }
+        catch (Exception ex)
+        {
+            return $"Error generating PlantUML ERD: {ex.Message}";
+        }
+    }
 }

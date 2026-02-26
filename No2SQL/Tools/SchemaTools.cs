@@ -205,18 +205,37 @@ internal class SchemaTools
     [Description("Generate a PlantUML ER diagram from MongoDB inference for a given database.")]
     public async Task<string> GenerateMongoErdPlantUml(
         [Description("Database name")] string databaseName)
+    {
+        try
         {
-            try
-            {
-                var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
-                var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
-    
-                return _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error in GenerateMongoErdPlantUml: {ex}");
-                return $"Error generating ERD: {ex.Message}";
-            }
+            var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            return _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
         }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateMongoErdPlantUml: {ex}");
+            return $"Error generating ERD: {ex.Message}";
+        }
+    }
+
+    [McpServerTool]
+    [Description("Generate a GraphViz DOT ER diagram from MongoDB inference for a given database.")]
+    public async Task<string> GenerateMongoErdDot(
+    [Description("Database name")] string databaseName)
+    {
+        try
+        {
+            var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
+            var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
+
+            return _erdGenerator.GenerateGraphVizFromMongo(schemas, relationships);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in GenerateMongoErdDot: {ex}");
+            return $"Error generating ERD: {ex.Message}";
+        }
+    }
 }

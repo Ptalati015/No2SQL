@@ -187,7 +187,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a Mermaid ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdMermaid(string databaseName, string source = "auto")
+    public async Task<string> GenerateErdMermaid(string databaseName, string source = "sql")
     {
         try
         {
@@ -198,22 +198,32 @@ internal class SchemaTools
             {
                 "sql" => true,
                 "mongo" => false,
-                "auto" => true,
-                _ => true
+                _ => true // auto
             };
+
+            string diagram = string.Empty;
 
             if (useSql)
             {
                 var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
 
                 if (sql.ErrorMessage == null)
-                    return _erdGenerator.GenerateMermaidFromSql(sql);
-
-                if (source == "sql")
-                    return $"SQL ERD failed: {sql.ErrorMessage}";
+                {
+                    diagram = _erdGenerator.GenerateMermaidFromSql(sql);
+                }
+                else
+                {
+                    if (source == "sql")
+                        return $"SQL ERD failed: {sql.ErrorMessage}";
+                }
             }
 
-            return _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
+            if (string.IsNullOrEmpty(diagram))
+            {
+                diagram = _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
+            }
+
+            return diagram;
         }
         catch (Exception ex)
         {
@@ -223,7 +233,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a PlantUML ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdPlantUml(string databaseName,string source = "auto")
+    public async Task<string> GenerateErdPlantUml(string databaseName, string source = "sql")
     {
         try
         {
@@ -234,22 +244,32 @@ internal class SchemaTools
             {
                 "sql" => true,
                 "mongo" => false,
-                "auto" => true,
-                _ => true
+                _ => true // auto
             };
+
+            string diagram = string.Empty;
 
             if (useSql)
             {
                 var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
 
                 if (sql.ErrorMessage == null)
-                    return _erdGenerator.GeneratePlantUmlFromSql(sql);
-
-                if (source == "sql")
-                    return $"SQL ERD failed: {sql.ErrorMessage}";
+                {
+                    diagram = _erdGenerator.GeneratePlantUmlFromSql(sql);
+                }
+                else
+                {
+                    if (source == "sql")
+                        return $"SQL ERD failed: {sql.ErrorMessage}";
+                }
             }
 
-            return _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
+            if (string.IsNullOrEmpty(diagram))
+            {
+                diagram = _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
+            }
+
+            return diagram;
         }
         catch (Exception ex)
         {
@@ -259,7 +279,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a GraphViz DOT ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdDot(string databaseName,string source = "auto")
+    public async Task<string> GenerateErdDot(string databaseName, string source = "sql")
     {
         try
         {
@@ -270,22 +290,32 @@ internal class SchemaTools
             {
                 "sql" => true,
                 "mongo" => false,
-                "auto" => true,
-                _ => true
+                _ => true // auto
             };
+
+            string diagram = string.Empty;
 
             if (useSql)
             {
-                var sql =  _scriptGenerator.GenerateSqlFromInference(schemas,relationships);
+                var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
 
                 if (sql.ErrorMessage == null)
-                    return _erdGenerator.GenerateGraphVizFromSql(sql);
-
-                if (source == "sql")
-                    return $"SQL ERD failed: {sql.ErrorMessage}";
+                {
+                    diagram = _erdGenerator.GenerateGraphVizFromSql(sql);
+                }
+                else
+                {
+                    if (source == "sql")
+                        return $"SQL ERD failed: {sql.ErrorMessage}";
+                }
             }
 
-            return _erdGenerator.GenerateGraphVizFromMongo(schemas, relationships);
+            if (string.IsNullOrEmpty(diagram))
+            {
+                diagram = _erdGenerator.GenerateGraphVizFromMongo(schemas, relationships);
+            }
+
+            return diagram;
         }
         catch (Exception ex)
         {

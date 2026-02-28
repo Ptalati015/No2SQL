@@ -224,5 +224,47 @@ public class ErdGenerator
 
         return sb.ToString().Trim() + "\n";
     }
+
+    public string GenerateGraphVizFromSql(SqlSchemaOutput sql)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("digraph ERD {");
+        sb.AppendLine("    rankdir=LR;");
+        sb.AppendLine("    graph [splines=ortho, nodesep=0.6, ranksep=0.8];");
+        sb.AppendLine("    node [shape=record, fontsize=10, fontname=\"Consolas\"];");
+        sb.AppendLine();
+
+        // Render tables as record-shaped nodes
+        foreach (var table in sql.Tables)
+        {
+            sb.AppendLine($"    {table.TableName} [label=\"{{{table.TableName}|");
+
+            foreach (var col in table.Columns)
+            {
+                var type = Util.MapSqlType(col.SqlType);
+                var pk = table.PrimaryKey == col.Name ? "*" : "";
+                var nullable = col.IsNullable ? "?" : "";
+
+                sb.AppendLine($"        {pk}{col.Name}{nullable} : {type}\\l");
+            }
+
+            sb.AppendLine("    }}\"];");
+            sb.AppendLine();
+        }
+
+        // Render foreign key edges
+        foreach (var fk in sql.ForeignKeys)
+        {
+            var toField = string.IsNullOrWhiteSpace(fk.ToColumn)
+                ? "_id"
+                : fk.ToColumn;
+
+            sb.AppendLine(
+                $"    {fk.ToTable} -> {fk.FromTable} [label=\"{fk.FromColumn} → {toField}\"];");
+        }
+
+        sb.AppendLine("}");
+        return sb.ToString().Trim() + "\n";
+    }
 }
 

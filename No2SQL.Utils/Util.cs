@@ -127,27 +127,25 @@ namespace No2SQL.Utils
             return sqlType.ToLower();
         }
 
-        public static string WriteToPath(string path, string content)
+        public static string ResolveOutputPath(string? path, string extension)
         {
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(path))
-                {
-                    File.WriteAllText(path, content);
-                }
-                else
-                {
-                    return "No path provided, skipping file write.";
-                }
+            if (string.IsNullOrWhiteSpace(path))
+                return "no path provided";
 
-                return "Successfully wrote to " + path;
-            }
-            catch (Exception ex)
+            // If user provided a directory or full path, respect it
+            if (Path.IsPathRooted(path) || path.Contains("/") || path.Contains("\\"))
             {
-                Console.Error.WriteLine($"Error writing to path '{path}': {ex.Message}");
-                return $"Error writing to path '{path}': {ex.Message}";
+                return Path.HasExtension(path) ? path : path + extension;
             }
+
+            // Otherwise, use default directory
+            var dir = Path.Combine(Directory.GetCurrentDirectory(), "no2sql-output");
+            Directory.CreateDirectory(dir);
+
+            var finalName = Path.HasExtension(path) ? path : path + extension;
+            return Path.Combine(dir, finalName);
         }
+
     }
 
 }

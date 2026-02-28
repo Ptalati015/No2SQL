@@ -126,6 +126,28 @@ namespace No2SQL.Utils
 
             return sqlType.ToLower();
         }
+
+        public static string WriteToPath(string path, string content)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    File.WriteAllText(path, content);
+                }
+                else
+                {
+                    return "No path provided, skipping file write.";
+                }
+
+                return "Successfully wrote to " + path;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error writing to path '{path}': {ex.Message}");
+                return $"Error writing to path '{path}': {ex.Message}";
+            }
+        }
     }
 
 }

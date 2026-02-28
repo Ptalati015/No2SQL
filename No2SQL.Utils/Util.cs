@@ -132,13 +132,11 @@ namespace No2SQL.Utils
             if (string.IsNullOrWhiteSpace(path))
                 return "no path provided";
 
-            // If user provided a directory or full path, respect it
-            if (Path.IsPathRooted(path) || path.Contains("/") || path.Contains("\\"))
+            if (Path.IsPathRooted(path) || path.Contains('/') || path.Contains('\\'))
             {
                 return Path.HasExtension(path) ? path : path + extension;
             }
 
-            // Otherwise, use default directory
             var dir = Path.Combine(Directory.GetCurrentDirectory(), "no2sql-output");
             Directory.CreateDirectory(dir);
 

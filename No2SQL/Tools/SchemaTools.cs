@@ -4,7 +4,6 @@ using No2SQL.Core;
 using No2SQL.Core.Models;
 using No2SQL.Sql;
 using No2SQL.Sql.Models;
-using No2SQL.Utils;
 using No2SQL.Visuals;
 internal class SchemaTools
 {
@@ -188,13 +187,13 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a Mermaid ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdMermaid(string databaseName, string source = "auto", string outputFilePath = null)
+    public async Task<string> GenerateErdMermaid(string databaseName, string source = "auto")
     {
         try
         {
             var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
-            var diagram = string.Empty;
+
             var useSql = source.ToLower() switch
             {
                 "sql" => true,
@@ -208,24 +207,13 @@ internal class SchemaTools
                 var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
 
                 if (sql.ErrorMessage == null)
-                    diagram = _erdGenerator.GenerateMermaidFromSql(sql);
+                    return _erdGenerator.GenerateMermaidFromSql(sql);
 
                 if (source == "sql")
                     return $"SQL ERD failed: {sql.ErrorMessage}";
             }
-            if (string.IsNullOrEmpty(diagram))
-            {
-                diagram = _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
-            }
 
-            if (!string.IsNullOrWhiteSpace(outputFilePath))
-            {
-                var finalPath = Util.ResolveOutputPath(outputFilePath, ".mmd");
-                File.WriteAllText(finalPath, diagram);
-                return $"Mermaid ERD saved to: {finalPath}";
-            }
-
-            return diagram;
+            return _erdGenerator.GenerateMermaidFromMongo(schemas, relationships);
         }
         catch (Exception ex)
         {
@@ -235,13 +223,13 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a PlantUML ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdPlantUml(string databaseName, string source = "auto", string outputFilePath = null)
+    public async Task<string> GenerateErdPlantUml(string databaseName,string source = "auto")
     {
         try
         {
             var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
-            var diagram = string.Empty;
+
             var useSql = source.ToLower() switch
             {
                 "sql" => true,
@@ -255,25 +243,13 @@ internal class SchemaTools
                 var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
 
                 if (sql.ErrorMessage == null)
-                    diagram = _erdGenerator.GeneratePlantUmlFromSql(sql);
+                    return _erdGenerator.GeneratePlantUmlFromSql(sql);
 
                 if (source == "sql")
                     return $"SQL ERD failed: {sql.ErrorMessage}";
             }
 
-            if (string.IsNullOrEmpty(diagram))
-            {
-                diagram = _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
-            }
-
-            if (!string.IsNullOrWhiteSpace(outputFilePath))
-            {
-                var finalPath = Util.ResolveOutputPath(outputFilePath, ".puml");
-                File.WriteAllText(finalPath, diagram);
-                return $"PlantUML ERD saved to: {finalPath}";
-            }
-
-            return diagram;
+            return _erdGenerator.GeneratePlantUmlFromMongo(schemas, relationships);
         }
         catch (Exception ex)
         {
@@ -283,7 +259,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate a GraphViz DOT ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdDot(string databaseName, string source = "auto", string outputFilePath = null)
+    public async Task<string> GenerateErdDot(string databaseName,string source = "auto")
     {
         try
         {
@@ -300,7 +276,7 @@ internal class SchemaTools
 
             if (useSql)
             {
-                var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
+                var sql =  _scriptGenerator.GenerateSqlFromInference(schemas,relationships);
 
                 if (sql.ErrorMessage == null)
                     return _erdGenerator.GenerateGraphVizFromSql(sql);
@@ -309,32 +285,7 @@ internal class SchemaTools
                     return $"SQL ERD failed: {sql.ErrorMessage}";
             }
 
-            var diagram = string.Empty;
-
-            if (useSql)
-            {
-                var sql = _scriptGenerator.GenerateSqlFromInference(schemas, relationships);
-
-                if (sql.ErrorMessage == null)
-                    diagram = _erdGenerator.GenerateGraphVizFromSql(sql);
-
-                if (source == "sql")
-                    return $"SQL ERD failed: {sql.ErrorMessage}";
-            }
-
-            if (string.IsNullOrEmpty(diagram))
-            {
-                diagram = _erdGenerator.GenerateGraphVizFromMongo(schemas, relationships);
-            }
-
-            if (!string.IsNullOrWhiteSpace(outputFilePath))
-            {
-                var finalPath = Util.ResolveOutputPath(outputFilePath, ".dot");
-                File.WriteAllText(finalPath, diagram);
-                return $"GraphViz DOT ERD saved to: {finalPath}";
-            }
-
-            return diagram;
+            return _erdGenerator.GenerateGraphVizFromMongo(schemas, relationships);
         }
         catch (Exception ex)
         {

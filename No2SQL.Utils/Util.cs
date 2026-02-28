@@ -127,23 +127,6 @@ namespace No2SQL.Utils
             return sqlType.ToLower();
         }
 
-        public static string ResolveOutputPath(string? path, string extension)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-                return "no path provided";
-
-            if (Path.IsPathRooted(path) || path.Contains('/') || path.Contains('\\'))
-            {
-                return Path.HasExtension(path) ? path : path + extension;
-            }
-
-            var dir = Path.Combine(Directory.GetCurrentDirectory(), "no2sql-output");
-            Directory.CreateDirectory(dir);
-
-            var finalName = Path.HasExtension(path) ? path : path + extension;
-            return Path.Combine(dir, finalName);
-        }
-
     }
 
 }

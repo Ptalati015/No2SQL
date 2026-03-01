@@ -1,12 +1,8 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
 using No2SQL.Core.Models;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using No2SQL.Utils;
-using System.Security.Cryptography.X509Certificates;
-using System.Runtime.InteropServices;
 namespace No2SQL.Core;
 
 
@@ -103,52 +99,61 @@ public partial class SchemaAnalyzer
         var collections = await db.ListCollectionNamesAsync();
         var collectionNames = await collections.ToListAsync();
 
-        // Preload sample documents for each collection
-        var samples = new Dictionary<string, List<BsonDocument>>();
+        // Precompute cache per collection
+        var cache = new Dictionary<string, CollectionCache>();
         foreach (var name in collectionNames)
         {
             var col = db.GetCollection<BsonDocument>(name);
-            samples[name] = await col.Find(FilterDefinition<BsonDocument>.Empty)
-                                    .Limit(200)
-                                    .ToListAsync();
+            var docs = await col.Find(FilterDefinition<BsonDocument>.Empty)
+                                .Limit(200)
+                                .ToListAsync();
+
+            cache[name] = new CollectionCache
+            {
+                NormalizedName = Util.Singularize(name.ToLower()),
+                Samples = docs,
+                TargetIds = docs
+                    .Select(d => Util.NormalizeId(d.GetValue("_id", BsonNull.Value)))
+                    .Where(v => v != null)
+                    .ToHashSet()
+            };
         }
 
         var relationships = new List<Relationship>();
         var fkPattern = MyRegex();
 
+        // FK inference using cached data
         foreach (var sourceCollection in collectionNames)
         {
-            foreach (var doc in samples[sourceCollection])
+            var source = cache[sourceCollection];
+
+            foreach (var doc in source.Samples)
             {
                 foreach (var element in doc.Elements)
                 {
                     var match = fkPattern.Match(element.Name);
                     if (!match.Success) continue;
 
-                    var fkPrefix = match.Groups[1].Value; // e.g. "movie" from "movie_id"
+                    var fkPrefix = match.Groups[1].Value;
                     var normalizedFk = Util.Singularize(fkPrefix.ToLower());
 
                     foreach (var targetCollection in collectionNames)
                     {
-                        var normalizedTarget = Util.Singularize(targetCollection.ToLower());
-                        // Check naming match
-                        if (normalizedFk != normalizedTarget)
+                        var target = cache[targetCollection];
+
+                        // Naming match
+                        if (normalizedFk != target.NormalizedName)
                             continue;
 
-                        // Validate by sampling referenced IDs
-                        var fkValues = samples[sourceCollection]
+                        // Sample FK values
+                        var fkValues = source.Samples
                             .Select(d => d.GetValue(element.Name, BsonNull.Value))
                             .Where(v => !v.IsBsonNull)
                             .Take(50)
                             .Select(v => Util.NormalizeId(v))
                             .ToHashSet();
 
-                        var targetIds = samples[targetCollection]
-                            .Select(d => Util.NormalizeId(d.GetValue("_id", BsonNull.Value)))
-                            .Where(v => v != null)
-                            .ToHashSet();
-
-                        var matches = fkValues.Intersect(targetIds).Count();
+                        var matches = fkValues.Intersect(target.TargetIds).Count();
                         var confidence = (double)matches / Math.Max(1, fkValues.Count);
 
                         if (matches > 0)
@@ -168,8 +173,6 @@ public partial class SchemaAnalyzer
 
         return relationships;
     }
-
-
     /// <summary>
     /// Gets all fields that look like foreign keys (ending with _id, Id, or ID) in each collection of the specified database.
     /// </summary>
@@ -495,4 +498,11 @@ public partial class SchemaAnalyzer
 
     [GeneratedRegex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex MyRegex();
+}
+
+internal class CollectionCache
+{
+    public string NormalizedName { get; set; }
+    public List<BsonDocument> Samples { get; set; }
+    public HashSet<string> TargetIds { get; set; }
 }

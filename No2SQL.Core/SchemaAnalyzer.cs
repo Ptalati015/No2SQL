@@ -85,85 +85,58 @@ public partial class SchemaAnalyzer
         }
     }
 
-    /// <summary>
-    /// Gets all fields that look like foreign keys (ending with _id, Id, or ID) in each collection of the specified database.
-    /// </summary>
-    /// <param name="databaseName"></param>
-    /// <returns></returns>
-    public async Task<Dictionary<string, HashSet<string>>> GetAllIdLikeFieldsAsync(string databaseName)
+
+    public async Task<Dictionary<string, SampledCollection>> SampleCollectionsAsync(string databaseName)
     {
         var db = _client.GetDatabase(databaseName);
-
-        var result = new Dictionary<string, HashSet<string>>();
-        var fkPattern = new Regex(@"(.+?)(_id|Id|ID)$", RegexOptions.IgnoreCase);
 
         var collections = await db.ListCollectionNamesAsync();
         var collectionNames = await collections.ToListAsync();
 
-        foreach (var collectionName in collectionNames)
+        var fkPattern = new Regex(@"(.+?)(_id|Id|ID)$", RegexOptions.IgnoreCase);
+
+        var result = new Dictionary<string, SampledCollection>();
+
+        foreach (var name in collectionNames)
         {
-            var fields = new HashSet<string>();
-            var collection = db.GetCollection<BsonDocument>(collectionName);
+            var col = db.GetCollection<BsonDocument>(name);
 
-            var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                            .Limit(200)
-                                            .ToListAsync();
+            // Sample once
+            var docs = await col.Find(FilterDefinition<BsonDocument>.Empty)
+                                .Limit(300)
+                                .ToListAsync();
 
-            foreach (var doc in sampleDocs)
+            var sampled = new SampledCollection
+            {
+                Name = name,
+                Documents = docs
+            };
+
+            // Discover ID-like fields
+            foreach (var doc in docs)
             {
                 foreach (var element in doc.Elements)
                 {
                     if (fkPattern.IsMatch(element.Name))
                     {
-                        fields.Add(element.Name);
+                        sampled.IdLikeFields.Add(element.Name);
                     }
                 }
             }
 
-            result[collectionName] = fields;
-        }
-
-        return result;
-    }
-
-
-    /// <summary>
-    /// Gets all values for fields that look like foreign keys (ending with _id, Id, or ID) in each collection of the specified database.
-    /// </summary>
-    /// <param name="databaseName"></param>
-    /// <returns> A dictionary where the keys are collection names and the values are dictionaries mapping field names to lists of their values. </returns>
-    public async Task<Dictionary<string, Dictionary<string, List<string>>>> GetAllIdLikeFieldValuesAsync(string databaseName)
-    {
-        var db = _client.GetDatabase(databaseName);
-
-        var result = new Dictionary<string, Dictionary<string, List<string>>>();
-
-        var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
-
-        foreach (var collectionName in idLikeFields.Keys)
-        {
-            var fields = idLikeFields[collectionName];
-            var collection = db.GetCollection<BsonDocument>(collectionName);
-
-            var sampleDocs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                            .Limit(500)
-                                            .ToListAsync();
-
-            var fieldValues = new Dictionary<string, List<string>>();
-
-            foreach (var field in fields)
+            // Extract ID-like field values
+            foreach (var field in sampled.IdLikeFields)
             {
-                var values = sampleDocs
+                var values = docs
                     .Where(d => d.Contains(field))
                     .Select(d => Util.NormalizeId(d.GetValue(field)))
                     .Where(v => v != null)
-                    .Distinct()
-                    .ToList();
+                    .ToHashSet();
 
-                fieldValues[field] = values;
+                sampled.IdLikeFieldValues[field] = values;
             }
 
-            result[collectionName] = fieldValues;
+            result[name] = sampled;
         }
 
         return result;
@@ -329,44 +302,6 @@ public partial class SchemaAnalyzer
         return result;
     }
     // Helper Methods 
-
-    /// <summary>
-    /// Gets all _id values for each collection in the specified database.
-    /// </summary>
-    /// <param name="databaseName"></param>
-    /// <returns></returns>
-    private async Task<Dictionary<string, List<string>>> GetAllIdsInDatabaseAsync(string databaseName)
-    {
-        var db = _client.GetDatabase(databaseName);
-        var result = new Dictionary<string, List<string>>();
-
-        var collections = await db.ListCollectionNamesAsync();
-        var collectionNames = await collections.ToListAsync();
-
-        foreach (var collectionName in collectionNames)
-        {
-            var ids = new List<string>();
-            var collection = db.GetCollection<BsonDocument>(collectionName);
-
-            var cursor = await collection.Find(FilterDefinition<BsonDocument>.Empty).ToCursorAsync();
-            while (await cursor.MoveNextAsync())
-            {
-                foreach (var doc in cursor.Current)
-                {
-                    var idValue = doc.GetValue("_id", BsonNull.Value);
-                    if (!idValue.IsBsonNull)
-                    {
-                        ids.Add(Util.NormalizeId(idValue));
-                    }
-                }
-            }
-
-            result[collectionName] = ids;
-        }
-
-        return result;
-    }
-
     public async Task<Dictionary<string, List<string>>> GetAllPrimaryKeysAsync(string databaseName)
     {
         var db = _client.GetDatabase(databaseName);
@@ -408,13 +343,41 @@ public partial class SchemaAnalyzer
         return result;
     }
 
+    private async Task<Dictionary<string, HashSet<string>>> GetAllIdLikeFieldsAsync(string databaseName)
+    {
+        var samples = await SampleCollectionsAsync(databaseName);
+
+        return samples.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.IdLikeFields
+        );
+    }
+
+    private async Task<Dictionary<string, Dictionary<string, List<string>>>> GetAllIdLikeFieldValuesAsync(string databaseName)
+    {
+        var samples = await SampleCollectionsAsync(databaseName);
+
+        return samples.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.IdLikeFieldValues
+                .ToDictionary(
+                    f => f.Key,
+                    f => f.Value.ToList()
+                )
+        );
+    }
+
+
     [GeneratedRegex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex MyRegex();
+
 }
 
-internal class CollectionCache
+public class SampledCollection
 {
-    public string NormalizedName { get; set; }
-    public List<BsonDocument> Samples { get; set; }
-    public HashSet<string> TargetIds { get; set; }
+    public string Name { get; set; } = "";
+    public List<BsonDocument> Documents { get; set; } = new();
+    public HashSet<string> IdLikeFields { get; set; } = new();
+    public Dictionary<string, HashSet<string>> IdLikeFieldValues { get; set; } = new();
+
 }

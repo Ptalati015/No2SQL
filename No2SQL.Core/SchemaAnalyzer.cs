@@ -93,7 +93,7 @@ public partial class SchemaAnalyzer
         var collections = await db.ListCollectionNamesAsync();
         var collectionNames = await collections.ToListAsync();
 
-        var fkPattern = new Regex(@"(.+?)(_id|Id|ID)$", RegexOptions.IgnoreCase);
+        var fkPattern = MyRegex();
 
         var result = new Dictionary<string, SampledCollection>();
 
@@ -111,6 +111,25 @@ public partial class SchemaAnalyzer
                 Name = name,
                 Documents = docs
             };
+
+            if (docs.Count == 0)
+            {
+                result[name] = sampled;
+                continue;
+            }
+
+            // Detect PK field from first doc
+            sampled.PrimaryKeyField = Util.DetectPrimaryKeyField(docs[0]);
+
+            // Extract PK values
+            if (sampled.PrimaryKeyField != null)
+            {
+                sampled.PrimaryKeyValues = docs
+                    .Where(d => d.Contains(sampled.PrimaryKeyField))
+                    .Select(d => Util.NormalizeId(d.GetValue(sampled.PrimaryKeyField)))
+                    .Where(v => v != null)
+                    .ToHashSet();
+            }
 
             // Discover ID-like fields
             foreach (var doc in docs)
@@ -149,19 +168,13 @@ public partial class SchemaAnalyzer
     /// <returns></returns>
     public async Task<Dictionary<string, List<string>>> GetFieldRelationshipsAsync(string databaseName)
     {
-        var result = new Dictionary<string, List<string>>();
+        var samples = await SampleCollectionsAsync(databaseName);
 
-        var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
+        return samples.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.IdLikeFields.ToList()
+        );
 
-        foreach (var kvp in idLikeFields)
-        {
-            var collectionName = kvp.Key;
-            var fields = kvp.Value.ToList();
-
-            result[collectionName] = fields;
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -171,59 +184,44 @@ public partial class SchemaAnalyzer
     /// <returns></returns>
     public async Task<List<Relationship>> GetRelationshipsAsync(string databaseName)
     {
+        var samples = await SampleCollectionsAsync(databaseName);
         var relationships = new List<Relationship>();
 
-        // 1. Load all primary key values per collection
-        var allIds = await GetAllPrimaryKeysAsync(databaseName);
-
-        // // 2. Load all ID-like fields per collection
-        // var idLikeFields = await GetAllIdLikeFieldsAsync(databaseName);
-
-        // 3. Load all values for each ID-like field
-        var idLikeFieldValues = await GetAllIdLikeFieldValuesAsync(databaseName);
-
-        foreach (var sourceCollection in idLikeFieldValues.Keys)
+        foreach (var source in samples.Values)
         {
-            var fields = idLikeFieldValues[sourceCollection];
-
-            foreach (var fkField in fields.Keys)
+            foreach (var fkField in source.IdLikeFields)
             {
-                // Skip self-id fields
                 if (fkField == "_id")
                     continue;
 
-                var fkValues = fields[fkField];
+                if (!source.IdLikeFieldValues.TryGetValue(fkField, out var fkValues))
+                    continue;
+
                 if (fkValues.Count == 0)
                     continue;
 
-                foreach (var targetCollection in allIds.Keys)
+                foreach (var target in samples.Values)
                 {
-                    // Skip self-relationships
-                    if (sourceCollection == targetCollection)
+                    if (source.Name == target.Name)
                         continue;
 
-                    // Skip embedded collections
-                    if (targetCollection.StartsWith("embedded_"))
+                    if (target.Name.StartsWith("embedded_"))
                         continue;
 
-                    var targetIds = allIds[targetCollection];
+                    var targetIds = target.PrimaryKeyValues;
 
-                    // Count matches
                     var matches = fkValues.Intersect(targetIds).Count();
                     if (matches == 0)
                         continue;
 
-                    // Compute confidence
-                    double confidence = (double)matches / fkValues.Count;
-
-                    // Skip weak matches (< 10%)
+                    var confidence = (double)matches / fkValues.Count;
                     if (confidence < 0.01)
                         continue;
 
                     relationships.Add(new Relationship
                     {
-                        FromCollection = sourceCollection,
-                        ToCollection = targetCollection,
+                        FromCollection = source.Name,
+                        ToCollection = target.Name,
                         FieldName = fkField,
                         Confidence = confidence
                     });
@@ -232,29 +230,25 @@ public partial class SchemaAnalyzer
         }
 
         return relationships;
-    }
 
+    }
+   
     public async Task<List<CollectionSchema>> AnalyzeCollectionsAsync(string databaseName)
     {
-        var db = _client.GetDatabase(databaseName);
+        var samples = await SampleCollectionsAsync(databaseName);
         var result = new List<CollectionSchema>();
 
-        var collections = await db.ListCollectionNamesAsync();
-        var collectionNames = await collections.ToListAsync();
-
-        foreach (var collectionName in collectionNames)
+        foreach (var kvp in samples)
         {
-            var collection = db.GetCollection<BsonDocument>(collectionName);
-
-            var docs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                       .Limit(300)
-                                       .ToListAsync();
+            var name = kvp.Key;
+            var sample = kvp.Value;
+            var docs = sample.Documents;
 
             if (docs.Count == 0)
             {
                 result.Add(new CollectionSchema
                 {
-                    Name = collectionName,
+                    Name = name,
                     PrimaryKey = "_id"
                 });
                 continue;
@@ -262,8 +256,8 @@ public partial class SchemaAnalyzer
 
             var schema = new CollectionSchema
             {
-                Name = collectionName,
-                PrimaryKey = Util.DetectPrimaryKeyField(docs[0])
+                Name = name,
+                PrimaryKey = sample.PrimaryKeyField ?? "_id"
             };
 
             foreach (var doc in docs)
@@ -290,84 +284,16 @@ public partial class SchemaAnalyzer
                 }
             }
 
-            // PK must be NOT NULL
             schema.Nullability[schema.PrimaryKey] = false;
-
-            // Mark embedded collections
-            schema.IsEmbedded = collectionName.StartsWith("embedded_");
+            schema.IsEmbedded = name.StartsWith("embedded_");
 
             result.Add(schema);
         }
 
         return result;
     }
-    // Helper Methods 
-    public async Task<Dictionary<string, List<string>>> GetAllPrimaryKeysAsync(string databaseName)
-    {
-        var db = _client.GetDatabase(databaseName);
-        var result = new Dictionary<string, List<string>>();
 
-        var collections = await db.ListCollectionNamesAsync();
-        var collectionNames = await collections.ToListAsync();
-
-        foreach (var collectionName in collectionNames)
-        {
-            var collection = db.GetCollection<BsonDocument>(collectionName);
-            var docs = await collection.Find(FilterDefinition<BsonDocument>.Empty)
-                                    .Limit(1000)
-                                    .ToListAsync();
-
-            if (docs.Count == 0)
-            {
-                result[collectionName] = new List<string>();
-                continue;
-            }
-
-            var pkField = Util.DetectPrimaryKeyField(docs[0]);
-            if (pkField == null)
-            {
-                result[collectionName] = new List<string>();
-                continue;
-            }
-
-            var values = docs
-                .Where(d => d.Contains(pkField))
-                .Select(d => Util.NormalizeId(d.GetValue(pkField)))
-                .Where(v => v != null)
-                .Distinct()
-                .ToList();
-
-            result[collectionName] = values;
-        }
-
-        return result;
-    }
-
-    private async Task<Dictionary<string, HashSet<string>>> GetAllIdLikeFieldsAsync(string databaseName)
-    {
-        var samples = await SampleCollectionsAsync(databaseName);
-
-        return samples.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.IdLikeFields
-        );
-    }
-
-    private async Task<Dictionary<string, Dictionary<string, List<string>>>> GetAllIdLikeFieldValuesAsync(string databaseName)
-    {
-        var samples = await SampleCollectionsAsync(databaseName);
-
-        return samples.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.IdLikeFieldValues
-                .ToDictionary(
-                    f => f.Key,
-                    f => f.Value.ToList()
-                )
-        );
-    }
-
-
+    
     [GeneratedRegex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase, "en-US")]
     private static partial Regex MyRegex();
 
@@ -379,5 +305,6 @@ public class SampledCollection
     public List<BsonDocument> Documents { get; set; } = new();
     public HashSet<string> IdLikeFields { get; set; } = new();
     public Dictionary<string, HashSet<string>> IdLikeFieldValues { get; set; } = new();
-
+    public string? PrimaryKeyField { get; set; }
+    public HashSet<string> PrimaryKeyValues { get; set; } = new();
 }

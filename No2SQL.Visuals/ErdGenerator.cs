@@ -31,7 +31,9 @@ public class ErdGenerator
 
         foreach (var schema in schemas.Where(s => !s.IsEmbedded))
         {
-            sb.AppendLine($"    {schema.Name} {{");
+            var tableName = Util.NormalizeName(schema.Name);
+
+            sb.AppendLine($"    {tableName} {{");
 
             foreach (var field in schema.Fields)
             {
@@ -55,7 +57,7 @@ public class ErdGenerator
 
             // ToCollection = parent (one), FromCollection = child (many)
             sb.AppendLine(
-                $"    {rel.ToCollection} ||--o{{ {rel.FromCollection} : \"{rel.FieldName} → {toField}\"");
+                $"    {Util.NormalizeName(rel.ToCollection)} ||--o{{ {Util.NormalizeName(rel.FromCollection)} : \"{rel.FieldName} → {toField}\"");
         }
 
 
@@ -71,7 +73,8 @@ public class ErdGenerator
         // Render entities
         foreach (var schema in schemas.Where(s => !s.IsEmbedded))
         {
-            sb.AppendLine($"entity {schema.Name} {{");
+            var tableName = Util.NormalizeName(schema.Name);
+            sb.AppendLine($"entity {tableName} {{");
 
             foreach (var field in schema.Fields)
             {
@@ -96,7 +99,7 @@ public class ErdGenerator
 
             // Parent = ToCollection, Child = FromCollection
             sb.AppendLine(
-                $"{rel.ToCollection} ||--o{{ {rel.FromCollection} : {rel.FieldName} → {toField}");
+                $"{Util.NormalizeName(rel.ToCollection)} ||--o{{ {Util.NormalizeName(rel.FromCollection)} : {rel.FieldName} → {toField}");
         }
 
         sb.AppendLine();
@@ -116,7 +119,8 @@ public class ErdGenerator
         // Render nodes
         foreach (var schema in schemas.Where(s => !s.IsEmbedded))
         {
-            sb.AppendLine($"    {schema.Name} [label=\"{{{schema.Name}|");
+            var tableName = Util.NormalizeName(schema.Name);
+            sb.AppendLine($"    {tableName} [label=\"{{{tableName   }|");
 
             foreach (var field in schema.Fields)
             {
@@ -140,7 +144,7 @@ public class ErdGenerator
                 : rel.ToField;
 
             sb.AppendLine(
-                $"    {rel.ToCollection} -> {rel.FromCollection} [label=\"{rel.FieldName} → {toField}\"];");
+                $"    {Util.NormalizeName(rel.ToCollection)} -> {Util.NormalizeName(rel.FromCollection)} [label=\"{rel.FieldName} → {toField}\"];");
         }
 
         sb.AppendLine("}");
@@ -155,8 +159,7 @@ public class ErdGenerator
         // Render tables
         foreach (var table in sql.Tables)
         {
-            var tableName = table.TableName; // keep original casing or normalize if you prefer
-
+            var tableName = Util.NormalizeName(table.TableName);
             sb.AppendLine($"    {tableName} {{");
 
             foreach (var col in table.Columns)
@@ -176,7 +179,7 @@ public class ErdGenerator
         foreach (var fk in sql.ForeignKeys)
         {
             sb.AppendLine(
-                $"    {fk.ToTable} ||--o{{ {fk.FromTable} : \"{fk.FromColumn} → {fk.ToColumn}\"");
+                $"    {Util.NormalizeName(fk.ToTable)} ||--o{{ {Util.NormalizeName(fk.FromTable)} : \"{fk.FromColumn} → {fk.ToColumn}\"");
         }
 
         return sb.ToString().Trim() + "\n";
@@ -191,7 +194,7 @@ public class ErdGenerator
         // Render entities (tables)
         foreach (var table in sql.Tables)
         {
-            var tableName = table.TableName;
+            var tableName = Util.NormalizeName(table.TableName);
 
             sb.AppendLine($"entity {tableName} {{");
 
@@ -216,7 +219,7 @@ public class ErdGenerator
                 : fk.ToColumn;
 
             sb.AppendLine(
-                $"{fk.ToTable} ||--o{{ {fk.FromTable} : {fk.FromColumn} → {toField}");
+                $"{Util.NormalizeName(fk.ToTable)} ||--o{{ {Util.NormalizeName(fk.FromTable)} : {fk.FromColumn} → {toField}");
         }
 
         sb.AppendLine();
@@ -237,7 +240,8 @@ public class ErdGenerator
         // Render tables as record-shaped nodes
         foreach (var table in sql.Tables)
         {
-            sb.AppendLine($"    {table.TableName} [label=\"{{{table.TableName}|");
+            var tableName = Util.NormalizeName(table.TableName);
+            sb.AppendLine($"    {tableName} [label=\"{{{tableName}|");
 
             foreach (var col in table.Columns)
             {
@@ -260,7 +264,7 @@ public class ErdGenerator
                 : fk.ToColumn;
 
             sb.AppendLine(
-                $"    {fk.ToTable} -> {fk.FromTable} [label=\"{fk.FromColumn} → {toField}\"];");
+                $"    {Util.NormalizeName(fk.ToTable)} -> {Util.NormalizeName(fk.FromTable)} [label=\"{fk.FromColumn} → {toField}\"];");
         }
 
         sb.AppendLine("}");

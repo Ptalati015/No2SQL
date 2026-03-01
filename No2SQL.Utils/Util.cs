@@ -127,6 +127,10 @@ namespace No2SQL.Utils
             return sqlType.ToLower();
         }
 
+        public static string NormalizeName(string name)
+        {
+            return name.ToLowerInvariant();
+        }
     }
 
 }

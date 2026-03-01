@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />
+    <ProjectReference Include="..\No2SQL.Sql\No2SQL.Sql.csproj" />
+    <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
+  </ItemGroup>
+</Project>

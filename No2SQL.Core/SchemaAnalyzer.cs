@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 namespace No2SQL.Core;
 
 
-public class SchemaAnalyzer
+public partial class SchemaAnalyzer
 {
     private readonly MongoClient _client;
     public SchemaAnalyzer(string? connectionString)
@@ -114,7 +114,7 @@ public class SchemaAnalyzer
         }
 
         var relationships = new List<Relationship>();
-        var fkPattern = new Regex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase);
+        var fkPattern = MyRegex();
 
         foreach (var sourceCollection in collectionNames)
         {
@@ -492,4 +492,7 @@ public class SchemaAnalyzer
 
         return result;
     }
+
+    [GeneratedRegex(@"(.+?)(_id|Id)$", RegexOptions.IgnoreCase, "en-US")]
+    private static partial Regex MyRegex();
 }

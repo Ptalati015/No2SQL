@@ -25,6 +25,7 @@ public class ScriptGenerator
     public SqlSchemaOutput GenerateSqlFromInference(List<CollectionSchema> collections, List<Relationship> relationships)
     {
         var output = new SqlSchemaOutput();
+        var collectionDict = collections.ToDictionary(c => c.Name, c => c);
 
         // 1. Generate tables
         foreach (var col in collections)
@@ -44,7 +45,7 @@ public class ScriptGenerator
         // 2. Generate foreign keys
         foreach (var rel in relationships)
         {
-            var targetCollection = collections.FirstOrDefault(c => c.Name == rel.ToCollection);
+            var targetCollection = collectionDict.GetValueOrDefault(rel.ToCollection);
             if (targetCollection == null)
                 continue; // Should not happen, but just in case
             var pkField = targetCollection.PrimaryKey;

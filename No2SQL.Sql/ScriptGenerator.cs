@@ -89,46 +89,60 @@ public class ScriptGenerator
         var db = _client.GetDatabase(databaseName);
         var collection = db.GetCollection<BsonDocument>(collectionName);
 
-        var docs = await collection
-            .Find(FilterDefinition<BsonDocument>.Empty)
-            .ToListAsync();
+        // Use a IAsyncCursor<BsonDocument> to efficiently stream documents if the collection is large
+        var filter = new BsonDocument(); // No filter, get all documents
+        var options = new FindOptions<BsonDocument>
+        {
+            BatchSize = 100
+        };
 
-        if (docs.Count == 0)
-            return [];
+
 
         // Collect all unique columns across all documents
-        var allColumns = docs
-            .SelectMany(d => d.Elements.Select(e => e.Name))
-            .Distinct()
-            .ToList();
+
+        var allColumns = new HashSet<string>();
+
+
+        var valueBlocks = new List<string>();
+
+
+        using (IAsyncCursor<BsonDocument> cursor = await collection.FindAsync(filter, options))
+        {
+            int batchCount = 0;
+            // MoveNextAsync() moves to the next batch and returns true if a batch is available
+            while (await cursor.MoveNextAsync())
+            {
+                // cursor.Current contains the current batch as an IEnumerable<TDocument>
+                IEnumerable<BsonDocument> documents = cursor.Current;
+                batchCount++;
+                Console.WriteLine($"\n--- Processing Batch {batchCount} ---");
+
+                foreach (BsonDocument document in documents)
+                {
+                    var rowValues = new List<string>();
+                    foreach (var element in document.Elements)
+                    {
+                        allColumns.Add(element.Name);
+                        if (document.Contains(element.Name))
+                            rowValues.Add($"    {ToSqlLiteralPretty(document[element.Name])}");
+                        else
+                            rowValues.Add("    NULL");
+                    }
+                    var block =
+    $@"(
+{string.Join(",\n", rowValues)}
+)";
+                    valueBlocks.Add(block);
+                }
+            }
+        }
+
+
 
         // Format column list
         var columnSql = allColumns
             .Select(c => $"    `{c}`")
             .ToList();
-
-        // Build VALUES blocks
-        var valueBlocks = new List<string>();
-
-        foreach (var doc in docs)
-        {
-            var rowValues = new List<string>();
-
-            foreach (var col in allColumns)
-            {
-                if (doc.Contains(col))
-                    rowValues.Add($"    {ToSqlLiteralPretty(doc[col])}");
-                else
-                    rowValues.Add("    NULL");
-            }
-
-            var block =
-    $@"(
-{string.Join(",\n", rowValues)}
-)";
-            valueBlocks.Add(block);
-        }
-
         // Final SQL
         var sql =
     $@"INSERT INTO `{collectionName}` (
@@ -138,7 +152,7 @@ public class ScriptGenerator
 ;
 ";
 
-        return new List<string> { NormalizeIndentation(sql) };
+        return [NormalizeIndentation(sql)];
     }
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)

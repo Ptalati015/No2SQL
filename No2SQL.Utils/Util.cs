@@ -78,20 +78,24 @@ namespace No2SQL.Utils
         }
         public static string InferMySqlType(BsonType type)
         {
+           
+
             return type switch
             {
-                BsonType.ObjectId => "VARCHAR(24)",
-                BsonType.String => "TEXT",
+                BsonType.String => InferStringType(type),
                 BsonType.Int32 => "INT",
                 BsonType.Int64 => "BIGINT",
-                BsonType.Double => "DOUBLE",
+                BsonType.Double => "DOUBLE PRECISION",
                 BsonType.Decimal128 => "DECIMAL(38,18)",
                 BsonType.Boolean => "BOOLEAN",
                 BsonType.DateTime => "DATETIME",
+                BsonType.ObjectId => "VARCHAR(24)",
                 BsonType.Array => "JSON",
                 BsonType.Document => "JSON",
-                _ => "JSON"
+                BsonType.Binary => "BLOB",
+                _ => "TEXT"
             };
+
         }
 
         public static string MapBsonType(BsonType t) => t switch
@@ -130,6 +134,14 @@ namespace No2SQL.Utils
         public static string NormalizeName(string name)
         {
             return name.ToLowerInvariant();
+        }
+        private static string InferStringType(BsonValue type)
+        {
+            var maxLen = type.AsString.Length;
+
+            return maxLen <= 255
+                ? "VARCHAR(255)"
+                : "TEXT";
         }
     }
 

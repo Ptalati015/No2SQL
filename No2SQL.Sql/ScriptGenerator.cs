@@ -296,6 +296,40 @@ public class ScriptGenerator
 
 
     }
-    private static string Escape(string s) => s.Replace("'", "''");
+
+    private static string Escape(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        var sb = new StringBuilder(input.Length + 16);
+
+        foreach (var ch in input)
+        {
+            switch (ch)
+            {
+                case '\'':
+                    sb.Append("''");      // SQL single-quote escape
+                    break;
+                case '\\':
+                    sb.Append("\\\\");    // Escape backslash
+                    break;
+                case '\n':
+                    sb.Append("\\n");     // Literal \n
+                    break;
+                case '\r':
+                    sb.Append("\\r");
+                    break;
+                case '\t':
+                    sb.Append("\\t");
+                    break;
+                default:
+                    sb.Append(ch);
+                    break;
+            }
+        }
+
+        return sb.ToString();
+    }
 
 }

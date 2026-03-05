@@ -252,6 +252,14 @@ public class ScriptGenerator
     {
         if (value.IsBsonNull) return "NULL";
 
+        if(value == null) return "NULL";
+
+        // Global settings for json
+        var jsonSettings = new MongoDB.Bson.IO.JsonWriterSettings
+        {
+            Indent = true,
+            IndentChars = "    "
+        };
         return value.BsonType switch
         {
             BsonType.String => $"'{Escape(value.AsString)}'",
@@ -263,11 +271,7 @@ public class ScriptGenerator
             BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
 
             BsonType.Array or BsonType.Document =>
-                $"'{Escape(value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
-                {
-                    Indent = true,
-                    IndentChars = "    "
-                }))}'",
+                $"'{Escape(value.ToJson(jsonSettings))}'",
 
             _ => $"'{Escape(value.ToString())}'"
         };

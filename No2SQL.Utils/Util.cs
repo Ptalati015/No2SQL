@@ -93,7 +93,7 @@ namespace No2SQL.Utils
                 BsonType.Array => "JSON",
                 BsonType.Document => "JSON",
                 BsonType.Binary => "BLOB",
-                _ => "TEXT"
+                _ => "JSON"
             };
 
         }

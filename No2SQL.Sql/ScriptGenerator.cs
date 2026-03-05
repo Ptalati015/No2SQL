@@ -97,8 +97,6 @@ public class ScriptGenerator
             BatchSize = 100
         };
 
-
-
         var allColumns = new HashSet<string>();
 
 

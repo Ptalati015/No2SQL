@@ -98,8 +98,6 @@ public class ScriptGenerator
 
 
 
-        // Collect all unique columns across all documents
-
         var allColumns = new HashSet<string>();
 
 
@@ -115,7 +113,6 @@ public class ScriptGenerator
                 // cursor.Current contains the current batch as an IEnumerable<TDocument>
                 IEnumerable<BsonDocument> documents = cursor.Current;
                 batchCount++;
-                Console.WriteLine($"\n--- Processing Batch {batchCount} ---");
 
                 foreach (BsonDocument document in documents)
                 {

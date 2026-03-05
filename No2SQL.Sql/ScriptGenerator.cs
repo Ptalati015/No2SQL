@@ -7,12 +7,13 @@ using System.Threading.Tasks;
 using No2SQL.Utils;
 using No2SQL.Sql.Models;
 using System.Text;
+using System.Globalization;
 namespace No2SQL.Sql;
 
 public class ScriptGenerator
 {
     private readonly MongoClient _client;
-
+    private static readonly IFormatProvider Invariant = CultureInfo.InvariantCulture;
     public ScriptGenerator(string? connectionString)
     {
         if (string.IsNullOrEmpty(connectionString))

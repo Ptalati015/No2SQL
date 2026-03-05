@@ -251,23 +251,23 @@ public class ScriptGenerator
 
     private static string ToSqlLiteralPretty(BsonValue value)
     {
-        if (value.IsBsonNull) return "NULL";
+        if (value == null || value.IsBsonNull)
+            return "NULL";
 
-        if(value == null) return "NULL";
-
-        // Global settings for json
         var jsonSettings = new MongoDB.Bson.IO.JsonWriterSettings
         {
             Indent = true,
             IndentChars = "    "
         };
+
         return value.BsonType switch
         {
             BsonType.String => $"'{Escape(value.AsString)}'",
             BsonType.ObjectId => $"'{value.AsObjectId.ToString()}'",
-            BsonType.Int32 => value.AsInt32.ToString(),
-            BsonType.Int64 => value.AsInt64.ToString(),
-            BsonType.Double => value.AsDouble.ToString(),
+            BsonType.Int32 => value.AsInt32.ToString(Invariant),
+            BsonType.Int64 => value.AsInt64.ToString(Invariant),
+            BsonType.Double => value.AsDouble.ToString(Invariant),
+            BsonType.Decimal128 => value.AsDecimal.ToString(Invariant),
             BsonType.Boolean => value.AsBoolean ? "TRUE" : "FALSE",
             BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
 

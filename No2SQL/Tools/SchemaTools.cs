@@ -161,7 +161,9 @@ internal class SchemaTools
     }
 
     [McpServerTool]
-    [Description("Generate SQL INSERT statements for all documents in a MongoDB collection.")]
+    [Description(
+    "Generate SQL INSERT statements for documents in a MongoDB collection. "
+    )]
     public async Task<List<string>> GenerateSeedersForCollection(
     [Description("Database name")] string databaseName,
     [Description("Collection name")] string collectionName)

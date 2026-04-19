@@ -89,23 +89,13 @@ public class ScriptGenerator
     {
         var db = _client.GetDatabase(databaseName);
         var collection = db.GetCollection<BsonDocument>(collectionName);
-        var count = await collection.CountDocumentsAsync(new BsonDocument());
-        if (count > 1000)
-        {
-            return new List<string>
-            {
-               $"ERROR: Collection '{collectionName}' contains {count} documents. " +
-                "This tool cannot generate or export SQL for large collections. " +
-                "No alternative methods are available. Only smaller subsets are supported."
-
-            };
-        }
 
         // Use a IAsyncCursor<BsonDocument> to efficiently stream documents if the collection is large
         var filter = new BsonDocument(); // No filter, get all documents
         var options = new FindOptions<BsonDocument>
         {
-            BatchSize = 100
+            BatchSize = 100,
+            Limit = 1000  // Always limit to first 1000 documents
         };
 
         var allColumns = new HashSet<string>();

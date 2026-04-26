@@ -8,6 +8,7 @@ using No2SQL.Utils;
 using No2SQL.Sql.Models;
 using System.Text;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 namespace No2SQL.Sql;
 
 public class ScriptGenerator
@@ -87,69 +88,144 @@ public class ScriptGenerator
 
     public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName)
     {
+        var statements = new List<string>();
+
+        await foreach (var statement in GenerateInsertStatementsForCollectionStream(databaseName, collectionName))
+        {
+            statements.Add(statement);
+        }
+
+        return statements;
+    }
+
+    public async IAsyncEnumerable<string> GenerateInsertStatementsForCollectionStream(
+        string databaseName,
+        string collectionName,
+        int batchSize = 100,
+        int limit = 1000,
+        int rowsPerChunk = 100,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(databaseName))
+        {
+            throw new ArgumentException("Database name cannot be null or empty.", nameof(databaseName));
+        }
+
+        if (string.IsNullOrWhiteSpace(collectionName))
+        {
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(collectionName));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than zero.");
+        }
+
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        if (rowsPerChunk <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowsPerChunk), "Rows per chunk must be greater than zero.");
+        }
+
         var db = _client.GetDatabase(databaseName);
         var collection = db.GetCollection<BsonDocument>(collectionName);
+        var filter = new BsonDocument();
 
-        // Use a IAsyncCursor<BsonDocument> to efficiently stream documents if the collection is large
-        var filter = new BsonDocument(); // No filter, get all documents
         var options = new FindOptions<BsonDocument>
         {
-            BatchSize = 100,
-            Limit = 1000  // Always limit to first 1000 documents
+            BatchSize = batchSize,
+            Limit = limit
         };
 
-        var allColumns = new HashSet<string>();
+        // Pass 1: discover a deterministic column set using first-seen order.
+        var seenColumns = new HashSet<string>(StringComparer.Ordinal);
+        var orderedColumns = new List<string>();
 
-
-        var valueBlocks = new List<string>();
-
-
-        using (IAsyncCursor<BsonDocument> cursor = await collection.FindAsync(filter, options))
+        using (IAsyncCursor<BsonDocument> discoveryCursor = await collection.FindAsync(filter, options, cancellationToken))
         {
-            int batchCount = 0;
-            // MoveNextAsync() moves to the next batch and returns true if a batch is available
-            while (await cursor.MoveNextAsync())
+            while (await discoveryCursor.MoveNextAsync(cancellationToken))
             {
-                // cursor.Current contains the current batch as an IEnumerable<TDocument>
-                IEnumerable<BsonDocument> documents = cursor.Current;
-                batchCount++;
-
-                foreach (BsonDocument document in documents)
+                foreach (BsonDocument document in discoveryCursor.Current)
                 {
-                    var rowValues = new List<string>();
                     foreach (var element in document.Elements)
                     {
-                        allColumns.Add(element.Name);
-                        if (document.Contains(element.Name))
-                            rowValues.Add($"    {ToSqlLiteralPretty(document[element.Name])}");
-                        else
-                            rowValues.Add("    NULL");
+                        if (seenColumns.Add(element.Name))
+                        {
+                            orderedColumns.Add(element.Name);
+                        }
                     }
-                    var block =
-    $@"(
-{string.Join(",\n", rowValues)}
-)";
-                    valueBlocks.Add(block);
                 }
             }
         }
 
+        if (orderedColumns.Count == 0)
+        {
+            yield break;
+        }
 
+        // Pass 2: emit independently executable INSERT chunks with bounded memory.
+        var chunkRows = new List<string>(rowsPerChunk);
 
-        // Format column list
-        var columnSql = allColumns
-            .Select(c => $"    `{c}`")
-            .ToList();
-        // Final SQL
-        var sql =
-    $@"INSERT INTO `{collectionName}` (
-{string.Join(",\n", columnSql)}
-) VALUES
-{string.Join(",\n,\n", valueBlocks)}
-;
-";
+        using (IAsyncCursor<BsonDocument> dataCursor = await collection.FindAsync(filter, options, cancellationToken))
+        {
+            while (await dataCursor.MoveNextAsync(cancellationToken))
+            {
+                foreach (BsonDocument document in dataCursor.Current)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-        return [NormalizeIndentation(sql)];
+                    var rowValues = new List<string>(orderedColumns.Count);
+                    foreach (var column in orderedColumns)
+                    {
+                        if (document.TryGetValue(column, out var value))
+                        {
+                            rowValues.Add($"    {ToSqlLiteralPretty(value)}");
+                        }
+                        else
+                        {
+                            rowValues.Add("    NULL");
+                        }
+                    }
+
+                    var rowBlock =
+$@"(
+{string.Join(",\n", rowValues)}
+)";
+
+                    chunkRows.Add(rowBlock);
+
+                    if (chunkRows.Count == rowsPerChunk)
+                    {
+                        yield return BuildInsertChunk(collectionName, orderedColumns, chunkRows);
+                        chunkRows.Clear();
+                    }
+                }
+            }
+        }
+
+        if (chunkRows.Count > 0)
+        {
+            yield return BuildInsertChunk(collectionName, orderedColumns, chunkRows);
+        }
+    }
+
+    private static string BuildInsertChunk(string collectionName, List<string> columns, List<string> rowBlocks)
+    {
+        var columnSql = string.Join(",\n", columns.Select(c => $"    `{c}`"));
+        var valuesSql = string.Join(",\n", rowBlocks);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"INSERT INTO `{collectionName}` (");
+        sb.AppendLine(columnSql);
+        sb.AppendLine(") VALUES");
+        sb.AppendLine(valuesSql);
+        sb.AppendLine(";");
+
+        return sb.ToString();
     }
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
@@ -273,7 +349,7 @@ public class ScriptGenerator
             BsonType.Array or BsonType.Document =>
                 $"'{Escape(value.ToJson(jsonSettings))}'",
 
-            _ => $"'{Escape(value.ToString())}'"
+            _ => $"'{Escape(value.ToString() ?? string.Empty)}'"
         };
     }
 

@@ -17,7 +17,7 @@ var mongoConn = builder.Configuration.GetConnectionString("MongoDb")
 
 builder.Services.AddScoped(sp => new SchemaAnalyzer(mongoConn));
 builder.Services.AddScoped(sp => new ScriptGenerator(mongoConn));
-builder.Services.AddScoped(sp => new ErdGenerator(mongoConn));
+builder.Services.AddScoped(sp => new ErdGenerator());
 
 
 // Add the MCP services: the transport to use (stdio) and the tools to register.

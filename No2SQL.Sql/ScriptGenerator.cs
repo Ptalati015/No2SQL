@@ -9,12 +9,19 @@ using No2SQL.Sql.Models;
 using System.Text;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using MongoDB.Bson.IO;
 namespace No2SQL.Sql;
 
 public class ScriptGenerator
 {
     private readonly MongoClient _client;
     private static readonly IFormatProvider Invariant = CultureInfo.InvariantCulture;
+    private static readonly JsonWriterSettings CompactJsonSettings = new()
+    {
+        Indent = false,
+        OutputMode = JsonOutputMode.RelaxedExtendedJson
+    };
+
     public ScriptGenerator(string? connectionString)
     {
         if (string.IsNullOrEmpty(connectionString))
@@ -329,12 +336,6 @@ $@"(
         if (value == null || value.IsBsonNull)
             return "NULL";
 
-        var jsonSettings = new MongoDB.Bson.IO.JsonWriterSettings
-        {
-            Indent = true,
-            IndentChars = "    "
-        };
-
         return value.BsonType switch
         {
             BsonType.String => $"'{Escape(value.AsString)}'",
@@ -347,7 +348,7 @@ $@"(
             BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
 
             BsonType.Array or BsonType.Document =>
-                $"'{Escape(value.ToJson(jsonSettings))}'",
+                $"'{Escape(value.ToJson(CompactJsonSettings))}'",
 
             _ => $"'{Escape(value.ToString() ?? string.Empty)}'"
         };

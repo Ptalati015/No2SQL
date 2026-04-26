@@ -222,11 +222,11 @@ $@"(
 
     private static string BuildInsertChunk(string collectionName, List<string> columns, List<string> rowBlocks)
     {
-        var columnSql = string.Join(",\n", columns.Select(c => $"    `{c}`"));
+        var columnSql = string.Join(",\n", columns.Select(c => $"    {QuoteIdentifier(c)}"));
         var valuesSql = string.Join(",\n", rowBlocks);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"INSERT INTO `{collectionName}` (");
+        sb.AppendLine($"INSERT INTO {QuoteIdentifier(collectionName)} (");
         sb.AppendLine(columnSql);
         sb.AppendLine(") VALUES");
         sb.AppendLine(valuesSql);
@@ -257,14 +257,14 @@ $@"(
             });
 
             columnSql.Add(
-                $"  `{field.Key}` {sqlType} {(field.Key == primaryKey ? "NOT NULL" : "")}"
+                $"  {QuoteIdentifier(field.Key)} {sqlType} {(field.Key == primaryKey ? "NOT NULL" : "")}"
             );
         }
 
-        columnSql.Add($"  PRIMARY KEY (`{primaryKey}`)");
+        columnSql.Add($"  PRIMARY KEY ({QuoteIdentifier(primaryKey)})");
 
         table.CreateTableSql =
-                $@"CREATE TABLE `{collectionName}` (
+                $@"CREATE TABLE {QuoteIdentifier(collectionName)} (
             {string.Join(",\n", columnSql)}
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
@@ -280,7 +280,7 @@ $@"(
             Table = table,
             Column = column,
             IndexName = indexName,
-            Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
+            Sql = $"CREATE INDEX {QuoteIdentifier(indexName)} ON {QuoteIdentifier(table)}({QuoteIdentifier(column)});"
         };
     }
 
@@ -289,10 +289,10 @@ $@"(
         var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";
 
         var sql =
-            $@"ALTER TABLE `{rel.FromCollection}`
-        ADD CONSTRAINT `{fkName}`
-        FOREIGN KEY (`{rel.FieldName}`)
-        REFERENCES `{rel.ToCollection}`(`{pkField}`)
+            $@"ALTER TABLE {QuoteIdentifier(rel.FromCollection)}
+        ADD CONSTRAINT {QuoteIdentifier(fkName)}
+        FOREIGN KEY ({QuoteIdentifier(rel.FieldName)})
+        REFERENCES {QuoteIdentifier(rel.ToCollection)}({QuoteIdentifier(pkField)})
         ON DELETE SET NULL;";
 
         return new SqlForeignKeyDefinition
@@ -387,6 +387,22 @@ $@"(
         }
 
         return sb.ToString();
+    }
+
+    private static string QuoteIdentifier(string identifier)
+    {
+        return $"`{EscapeIdentifier(identifier)}`";
+    }
+
+    private static string EscapeIdentifier(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            throw new ArgumentException("SQL identifier cannot be null or whitespace.", nameof(identifier));
+        }
+
+        // MySQL identifier escaping: embedded backticks are escaped by doubling.
+        return identifier.Replace("`", "``");
     }
 
 }

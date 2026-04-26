@@ -8,5 +8,6 @@
   <ItemGroup>
     <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />
     <ProjectReference Include="..\No2SQL.Sql\No2SQL.Sql.csproj" />
+    <ProjectReference Include="..\No2SQL.Visuals\No2SQL.Visuals.csproj" />
   </ItemGroup>
 </Project>

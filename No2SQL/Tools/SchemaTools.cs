@@ -27,8 +27,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in TestConnectivity: {ex.Message}\n{ex.StackTrace}");
-            return Task.FromResult($"Error testing connectivity: {ex.Message}");
+            return Task.FromResult(HandleToolError("testing MCP connectivity", ex));
         }
     }
 
@@ -44,8 +43,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in ListDatabases: {ex.Message}\n{ex.StackTrace}");
-            return $"Error listing databases: {ex.Message}";
+            return HandleToolError("listing databases", ex);
         }
     }
 
@@ -67,8 +65,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}\n{ex.StackTrace}");
-            return $"Error listing inferred relationships for database '{databaseName}': {ex.Message}";
+            return HandleToolError("listing inferred relationships", ex, databaseName);
         }
     }
 
@@ -92,8 +89,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}\n{ex.StackTrace}");
-            return $"Error comparing Id Like fields to _id values for database '{databaseName}': {ex.Message}";
+            return HandleToolError("comparing Id-like fields to _id values", ex, databaseName);
         }
     }
 
@@ -111,8 +107,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
-            return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
+            return HandleToolError("generating SQL schema", ex, databaseName);
         }
     }
 
@@ -132,8 +127,11 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSqlSchemaAdvanced: {ex}");
-            throw;
+            var message = HandleToolError("generating advanced SQL schema", ex, databaseName);
+            return new SqlSchemaOutput
+            {
+                ErrorMessage = message
+            };
         }
     }
 
@@ -158,8 +156,11 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSeedersForCollection: {ex}");
-            throw;
+            var message = HandleToolError(
+                "generating SQL seeders",
+                ex,
+                $"{SanitizeLabel(databaseName)}.{SanitizeLabel(collectionName)}");
+            throw new InvalidOperationException(message);
         }
     }
 
@@ -206,7 +207,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating Mermaid ERD: {ex.Message}";
+            return HandleToolError("generating Mermaid ERD", ex, databaseName);
         }
     }
 
@@ -252,7 +253,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating PlantUML ERD: {ex.Message}";
+            return HandleToolError("generating PlantUML ERD", ex, databaseName);
         }
     }
 
@@ -298,8 +299,36 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating DOT ERD: {ex.Message}";
+            return HandleToolError("generating DOT ERD", ex, databaseName);
         }
+    }
+
+    private static string HandleToolError(string operation, Exception ex, string? subject = null)
+    {
+        var errorId = Guid.NewGuid().ToString("N")[..8];
+        var subjectSuffix = string.IsNullOrWhiteSpace(subject) ? string.Empty : $" for '{SanitizeLabel(subject)}'";
+
+        Console.Error.WriteLine(
+            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {ex.GetType().Name}: {ex.Message}");
+
+        return $"Unable to complete {operation}{subjectSuffix}. See server logs with error id {errorId}.";
+    }
+
+    private static string SanitizeLabel(string input)
+    {
+        var trimmed = input.Trim();
+        if (trimmed.Length == 0)
+        {
+            return "(empty)";
+        }
+
+        var compact = trimmed
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Replace("\t", " ");
+
+        const int maxLength = 120;
+        return compact.Length <= maxLength ? compact : compact[..maxLength] + "...";
     }
 
 }

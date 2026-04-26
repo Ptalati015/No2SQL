@@ -60,7 +60,7 @@ public partial class SchemaAnalyzer
             {
                 Console.Error.WriteLine($"Inner Exception: {ex.InnerException.Message}");
             }
-            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}\n{ex.StackTrace}");
+            Console.Error.WriteLine($"Error in AnalyzeAsync: {ex.Message}\n{ex.StackTrace}");
             throw new Exception($"Error analyzing database '{databaseName}': {ex.Message}", ex);
 
         }
@@ -127,7 +127,8 @@ public partial class SchemaAnalyzer
                 sampled.PrimaryKeyValues = docs
                     .Where(d => d.Contains(sampled.PrimaryKeyField))
                     .Select(d => Util.NormalizeId(d.GetValue(sampled.PrimaryKeyField)))
-                    .Where(v => v != null)
+                    .Where(v => v is not null)
+                    .Select(v => v!)
                     .ToHashSet();
             }
 
@@ -149,7 +150,8 @@ public partial class SchemaAnalyzer
                 var values = docs
                     .Where(d => d.Contains(field))
                     .Select(d => Util.NormalizeId(d.GetValue(field)))
-                    .Where(v => v != null)
+                    .Where(v => v is not null)
+                    .Select(v => v!)
                     .ToHashSet();
 
                 sampled.IdLikeFieldValues[field] = values;

@@ -354,25 +354,6 @@ $@"(
         };
     }
 
-    private static string NormalizeIndentation(string sql)
-    {
-        var lines = sql.Replace("\r", "").Split('\n');
-
-        var minIndent = lines
-            .Where(l => l.Trim().Length > 0)
-            .Select(l => l.TakeWhile(Char.IsWhiteSpace).Count())
-            .DefaultIfEmpty(0)
-            .Min();
-
-        var normalized = string.Join("\n", lines.Select(l =>
-            l.Length >= minIndent ? l[minIndent..] : l
-        ));
-
-        return normalized.Trim() + "\n";
-
-
-    }
-
     private static string Escape(string input)
     {
         if (string.IsNullOrEmpty(input))

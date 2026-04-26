@@ -19,37 +19,16 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Test MCP server connectivity.")]
-    public async Task<string> TestConnectivity()
+    public Task<string> TestConnectivity()
     {
         try
         {
-
-            return "MCP connectivity test successful!";
+            return Task.FromResult("MCP connectivity test successful!");
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error in TestConnectivity: {ex.Message}\n{ex.StackTrace}");
-            return $"Error testing connectivity: {ex.Message}";
-        }
-    }
-
-    [McpServerTool]
-    [Description("Test AnalyzeAsync on a MongoDB database.")]
-    public async Task<string> TestAnalyze(
-        [Description("Database name")] string databaseName)
-    {
-        try
-        {
-            var res = await _analyzer.AnalyzeAsync(databaseName);
-            return $"Schema analysis for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(kvp =>
-                    $"- Collection '{kvp.Key}': Fields: {string.Join(", ", kvp.Value)}"));
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}");
-            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}\n{ex.StackTrace}");
-            return $"Error analyzing database '{databaseName}': {ex.Message}";
+            return Task.FromResult($"Error testing connectivity: {ex.Message}");
         }
     }
 
@@ -113,7 +92,6 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}");
             Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}\n{ex.StackTrace}");
             return $"Error comparing Id Like fields to _id values for database '{databaseName}': {ex.Message}";
         }
@@ -133,7 +111,6 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
             Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
             return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
         }

@@ -31,6 +31,22 @@ The `bin/Release` directory will contain the package file (.nupkg), which can be
 
 ## Developing locally
 
+### Configuration for repo users
+
+This repository intentionally uses a placeholder value for `ConnectionStrings:MongoDb` in `appsettings.json`.
+
+Set your MongoDB connection string using one of these options:
+
+1. Preferred: set environment variable `NO2SQL_MONGO`
+2. Alternative: replace the placeholder in `No2SQL/appsettings.json`
+3. If using workspace MCP config, replace the placeholder in `.vscode/mcp.json`
+
+Example value format:
+
+```text
+mongodb+srv://<username>:<password>@<cluster-host>/<database>?retryWrites=true&w=majority
+```
+
 To test this MCP server from source code (locally) without using a built MCP server package, you can configure your IDE to run the project directly using `dotnet run`.
 
 ```json

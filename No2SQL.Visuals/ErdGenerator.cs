@@ -26,6 +26,7 @@ public class ErdGenerator
 
     public string GenerateMermaidFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
     {
+        var deduplicatedRelationships = DeduplicateRelationships(relationships);
         var sb = new StringBuilder();
         sb.AppendLine("erDiagram");
 
@@ -59,7 +60,7 @@ public class ErdGenerator
             sb.AppendLine();
         }
 
-        foreach (var rel in relationships)
+        foreach (var rel in deduplicatedRelationships)
         {
             var toField = string.IsNullOrWhiteSpace(rel.ToField)
                 ? "_id"
@@ -84,6 +85,7 @@ public class ErdGenerator
 
     public string GeneratePlantUmlFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
     {
+        var deduplicatedRelationships = DeduplicateRelationships(relationships);
         var sb = new StringBuilder();
         sb.AppendLine("@startuml");
         sb.AppendLine();
@@ -119,7 +121,7 @@ public class ErdGenerator
         }
 
         // Render relationships
-        foreach (var rel in relationships)
+        foreach (var rel in deduplicatedRelationships)
         {
             var toField = string.IsNullOrWhiteSpace(rel.ToField)
                 ? "_id"
@@ -146,6 +148,7 @@ public class ErdGenerator
 
     public string GenerateGraphVizFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)
     {
+        var deduplicatedRelationships = DeduplicateRelationships(relationships);
         var sb = new StringBuilder();
         sb.AppendLine("digraph ERD {");
         sb.AppendLine("    rankdir=LR;");
@@ -187,7 +190,7 @@ public class ErdGenerator
         }
 
         // Render edges
-        foreach (var rel in relationships)
+        foreach (var rel in deduplicatedRelationships)
         {
             var toField = string.IsNullOrWhiteSpace(rel.ToField)
                 ? "_id"
@@ -209,6 +212,7 @@ public class ErdGenerator
 
     public string GenerateMermaidFromSql(SqlSchemaOutput sql)
     {
+        var deduplicatedFks = DeduplicateForeignKeys(sql.ForeignKeys);
         var sb = new StringBuilder();
         sb.AppendLine("erDiagram");
 
@@ -239,7 +243,7 @@ public class ErdGenerator
         }
 
         // Render foreign keys
-        foreach (var fk in sql.ForeignKeys)
+        foreach (var fk in deduplicatedFks)
         {
             if (!idMap.TryGetValue(fk.ToTable, out var toId) || !idMap.TryGetValue(fk.FromTable, out var fromId))
             {
@@ -256,6 +260,7 @@ public class ErdGenerator
 
     public string GeneratePlantUmlFromSql(SqlSchemaOutput sql)
     {
+        var deduplicatedFks = DeduplicateForeignKeys(sql.ForeignKeys);
         var sb = new StringBuilder();
         sb.AppendLine("@startuml");
         sb.AppendLine();
@@ -287,7 +292,7 @@ public class ErdGenerator
         }
 
         // Render relationships (foreign keys)
-        foreach (var fk in sql.ForeignKeys)
+        foreach (var fk in deduplicatedFks)
         {
             var toField = string.IsNullOrWhiteSpace(fk.ToColumn)
                 ? "_id"
@@ -311,6 +316,7 @@ public class ErdGenerator
 
     public string GenerateGraphVizFromSql(SqlSchemaOutput sql)
     {
+        var deduplicatedFks = DeduplicateForeignKeys(sql.ForeignKeys);
         var sb = new StringBuilder();
         sb.AppendLine("digraph ERD {");
         sb.AppendLine("    rankdir=LR;");
@@ -349,7 +355,7 @@ public class ErdGenerator
         }
 
         // Render foreign key edges
-        foreach (var fk in sql.ForeignKeys)
+        foreach (var fk in deduplicatedFks)
         {
             var toField = string.IsNullOrWhiteSpace(fk.ToColumn)
                 ? "_id"
@@ -590,6 +596,18 @@ public class ErdGenerator
         var bytes = Encoding.UTF8.GetBytes(value);
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash[..4]).ToLowerInvariant();
+    }
+
+    private static IEnumerable<Relationship> DeduplicateRelationships(IEnumerable<Relationship> rels)
+    {
+        return rels
+            .GroupBy(r => $"{r.FromCollection}\0{r.ToCollection}\0{r.FieldName}")
+            .Select(g => g.OrderByDescending(r => r.Confidence).First());
+    }
+
+    private static IEnumerable<SqlForeignKeyDefinition> DeduplicateForeignKeys(IEnumerable<SqlForeignKeyDefinition> fks)
+    {
+        return fks.DistinctBy(fk => (fk.FromTable, fk.ToTable, fk.FromColumn));
     }
 }
 

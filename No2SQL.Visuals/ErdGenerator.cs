@@ -1,5 +1,4 @@
 ﻿using MongoDB.Bson;
-using MongoDB.Driver;
 using No2SQL.Core.Models;
 using System.Collections.Generic;
 using No2SQL.Utils;
@@ -11,17 +10,6 @@ namespace No2SQL.Visuals;
 
 public class ErdGenerator
 {
-    private readonly MongoClient _client;
-
-    public ErdGenerator(string? connectionString)
-    {
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
-        }
-        _client = new MongoClient(connectionString);
-    }
-
     // Mongodb Visual Generator
 
     public string GenerateMermaidFromMongo(List<CollectionSchema> schemas, List<Relationship> relationships)

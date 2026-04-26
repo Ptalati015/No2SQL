@@ -108,7 +108,7 @@ internal class SchemaTools
             }
             return $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
                 string.Join("\n", res.Select(r =>
-                    $"- {r.FromCollection}' -> To Collection '{r.ToCollection}' " +
+                    $"- '{r.FromCollection}' -> To Collection '{r.ToCollection}' " +
                     $"via Field '{r.FieldName}' ({r.Confidence:P2})"));
         }
         catch (Exception ex)
@@ -141,7 +141,7 @@ internal class SchemaTools
 
     [McpServerTool]
     [Description("Generate SQL schema with optional user-provided relationships.")]
-    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride> overrides = null)
+    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride>? overrides = null)
     {
         try
         {

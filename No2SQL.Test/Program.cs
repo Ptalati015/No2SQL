@@ -3,29 +3,30 @@ using System.Text.RegularExpressions;
 using No2SQL.Core;
 using No2SQL.Sql;
 
+const string TestDatabaseEnvVar = "NO2SQL_TEST_DATABASE";
+const string TestCollectionEnvVar = "NO2SQL_TEST_COLLECTION";
+const string TestRowsPerChunkEnvVar = "NO2SQL_TEST_ROWS_PER_CHUNK";
+const string TestLimitEnvVar = "NO2SQL_TEST_LIMIT";
+const string TestBatchSizeEnvVar = "NO2SQL_TEST_BATCH_SIZE";
+
+const int DefaultRowsPerChunk = 2;
+const int DefaultLimit = 1000;
+const int DefaultBatchSize = 100;
+
 if (args.Length > 0 && string.Equals(args[0], "--test-stream", StringComparison.OrdinalIgnoreCase))
 {
     await RunStreamSeederValidationAsync(args);
     return;
 }
 
-var databaseName = args.Length > 0 ? args[0] : "School";
-
-string? connectionString = Environment.GetEnvironmentVariable("NO2SQL_MONGO");
-if (string.IsNullOrWhiteSpace(connectionString))
+var databaseName = ResolveStringArgOrEnv(args, 0, TestDatabaseEnvVar);
+if (string.IsNullOrWhiteSpace(databaseName))
 {
-    var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "No2SQL", "appsettings.json");
-    if (File.Exists(appSettingsPath))
-    {
-        var json = await File.ReadAllTextAsync(appSettingsPath);
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("ConnectionStrings", out var cs) &&
-            cs.TryGetProperty("MongoDb", out var mongoDb))
-        {
-            connectionString = mongoDb.GetString();
-        }
-    }
+    Console.Error.WriteLine($"Missing database name. Provide args[0] or set {TestDatabaseEnvVar}.");
+    return;
 }
+
+string? connectionString = await ResolveConnectionStringAsync();
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
@@ -57,14 +58,15 @@ catch (Exception ex)
 
 static async Task RunStreamSeederValidationAsync(string[] args)
 {
-    var databaseName = args.Length > 1 ? args[1] : "School";
-    var collectionName = args.Length > 2 ? args[2] : string.Empty;
-    var rowsPerChunk = args.Length > 3 && int.TryParse(args[3], out var parsedRowsPerChunk) ? parsedRowsPerChunk : 2;
-    var limit = args.Length > 4 && int.TryParse(args[4], out var parsedLimit) ? parsedLimit : 1000;
+    var databaseName = ResolveStringArgOrEnv(args, 1, TestDatabaseEnvVar);
+    var collectionName = ResolveStringArgOrEnv(args, 2, TestCollectionEnvVar);
+    var rowsPerChunk = ResolveIntArgOrEnv(args, 3, TestRowsPerChunkEnvVar, DefaultRowsPerChunk);
+    var limit = ResolveIntArgOrEnv(args, 4, TestLimitEnvVar, DefaultLimit);
+    var batchSize = ResolveIntArgOrEnv(args, 5, TestBatchSizeEnvVar, DefaultBatchSize);
 
-    if (string.IsNullOrWhiteSpace(collectionName))
+    if (string.IsNullOrWhiteSpace(databaseName) || string.IsNullOrWhiteSpace(collectionName))
     {
-        Console.Error.WriteLine("Usage: --test-stream <databaseName> <collectionName> [rowsPerChunk] [limit]");
+        Console.Error.WriteLine($"Usage: --test-stream <databaseName> <collectionName> [rowsPerChunk] [limit] [batchSize]\nOr set env vars: {TestDatabaseEnvVar}, {TestCollectionEnvVar}, {TestRowsPerChunkEnvVar}, {TestLimitEnvVar}, {TestBatchSizeEnvVar}.");
         return;
     }
 
@@ -83,7 +85,7 @@ static async Task RunStreamSeederValidationAsync(string[] args)
         await foreach (var chunk in scriptGenerator.GenerateInsertStatementsForCollectionStream(
             databaseName,
             collectionName,
-            batchSize: 100,
+            batchSize: batchSize,
             limit: limit,
             rowsPerChunk: rowsPerChunk))
         {
@@ -110,7 +112,7 @@ static async Task RunStreamSeederValidationAsync(string[] args)
         }
 
         Console.WriteLine($"Streaming seeder validation passed for '{databaseName}.{collectionName}'.");
-        Console.WriteLine($"Chunks: {chunks.Count}, rowsPerChunk: {rowsPerChunk}, limit: {limit}");
+        Console.WriteLine($"Chunks: {chunks.Count}, rowsPerChunk: {rowsPerChunk}, limit: {limit}, batchSize: {batchSize}");
         Console.WriteLine("First chunk preview:");
         Console.WriteLine(chunks[0]);
     }
@@ -183,8 +185,38 @@ static async Task<string?> ResolveConnectionStringAsync()
     if (doc.RootElement.TryGetProperty("ConnectionStrings", out var cs) &&
         cs.TryGetProperty("MongoDb", out var mongoDb))
     {
-        return mongoDb.GetString();
+        var fromConfig = mongoDb.GetString();
+        if (!string.IsNullOrWhiteSpace(fromConfig) && !fromConfig.Contains("<", StringComparison.Ordinal))
+        {
+            return fromConfig;
+        }
     }
 
     return null;
+}
+
+static string? ResolveStringArgOrEnv(string[] args, int index, string envVar)
+{
+    if (index < args.Length && !string.IsNullOrWhiteSpace(args[index]))
+    {
+        return args[index];
+    }
+
+    return Environment.GetEnvironmentVariable(envVar);
+}
+
+static int ResolveIntArgOrEnv(string[] args, int index, string envVar, int fallback)
+{
+    if (index < args.Length && int.TryParse(args[index], out var fromArg))
+    {
+        return fromArg;
+    }
+
+    var fromEnv = Environment.GetEnvironmentVariable(envVar);
+    if (int.TryParse(fromEnv, out var parsedEnv))
+    {
+        return parsedEnv;
+    }
+
+    return fallback;
 }

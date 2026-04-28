@@ -51,4 +51,10 @@
     <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
   </ItemGroup>
 
+  <Target Name="RemovePdbFilesFromReleasePublish" AfterTargets="ComputeFilesToPublish" Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

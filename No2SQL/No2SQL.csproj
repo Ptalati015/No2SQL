@@ -20,10 +20,17 @@
 
     <!-- Set recommended package metadata -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageId>SampleMcpServer</PackageId>
+    <PackageId>No2SQL</PackageId>
     <PackageVersion>0.1.0-beta</PackageVersion>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
-    <Description>An MCP server using the MCP C# SDK.</Description>
+    <Description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</Description>
+    <Authors>Preet Talati</Authors>
+    <Company>No2SQL</Company>
+    <PackageProjectUrl>https://github.com/Ptalati015/No2SQL</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Ptalati015/No2SQL</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReleaseNotes>Initial beta release of the No2SQL MCP server package.</PackageReleaseNotes>
   </PropertyGroup>
 
   <!-- Include additional files for browsing the MCP server. -->

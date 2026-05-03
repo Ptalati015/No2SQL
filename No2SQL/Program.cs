@@ -1,10 +1,14 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using No2SQL.Core;
+using No2SQL.Security;
 using No2SQL.Sql;
 using No2SQL.Visuals;
+
+[assembly: InternalsVisibleTo("No2SQL.Test")]
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -24,6 +28,7 @@ var mongoConn = !string.IsNullOrWhiteSpace(envMongoConn)
 builder.Services.AddScoped(sp => new SchemaAnalyzer(mongoConn));
 builder.Services.AddScoped(sp => new ScriptGenerator(mongoConn));
 builder.Services.AddScoped(sp => new ErdGenerator());
+builder.Services.AddSingleton(sp => new McpGuardrails());
 
 
 // Add the MCP services: the transport to use (stdio) and the tools to register.

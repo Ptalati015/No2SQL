@@ -2,6 +2,7 @@ using System.ComponentModel;
 using ModelContextProtocol.Server;
 using No2SQL.Core;
 using No2SQL.Core.Models;
+using No2SQL.Security;
 using No2SQL.Sql;
 using No2SQL.Sql.Models;
 using No2SQL.Visuals;
@@ -10,46 +11,31 @@ internal class SchemaTools
     private readonly SchemaAnalyzer _analyzer;
     private readonly ScriptGenerator _scriptGenerator;
     private readonly ErdGenerator _erdGenerator;
-    public SchemaTools(SchemaAnalyzer schemaAnalyzer, ScriptGenerator scriptGenerator, ErdGenerator erdGenerator)
+    private readonly McpGuardrails _guardrails;
+
+    public SchemaTools(
+        SchemaAnalyzer schemaAnalyzer,
+        ScriptGenerator scriptGenerator,
+        ErdGenerator erdGenerator,
+        McpGuardrails guardrails)
     {
         _analyzer = schemaAnalyzer;
         _scriptGenerator = scriptGenerator;
         _erdGenerator = erdGenerator;
+        _guardrails = guardrails;
     }
 
     [McpServerTool]
     [Description("Test MCP server connectivity.")]
-    public async Task<string> TestConnectivity()
+    public Task<string> TestConnectivity()
     {
         try
         {
-
-            return "MCP connectivity test successful!";
+            return Task.FromResult("MCP connectivity test successful!");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in TestConnectivity: {ex.Message}\n{ex.StackTrace}");
-            return $"Error testing connectivity: {ex.Message}";
-        }
-    }
-
-    [McpServerTool]
-    [Description("Test AnalyzeAsync on a MongoDB database.")]
-    public async Task<string> TestAnalyze(
-        [Description("Database name")] string databaseName)
-    {
-        try
-        {
-            var res = await _analyzer.AnalyzeAsync(databaseName);
-            return $"Schema analysis for database '{databaseName}':\n" +
-                string.Join("\n", res.Select(kvp =>
-                    $"- Collection '{kvp.Key}': Fields: {string.Join(", ", kvp.Value)}"));
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}");
-            Console.Error.WriteLine($"Error in TestAnalyze: {ex.Message}\n{ex.StackTrace}");
-            return $"Error analyzing database '{databaseName}': {ex.Message}";
+            return Task.FromResult(HandleToolError("testing MCP connectivity", ex));
         }
     }
 
@@ -60,13 +46,25 @@ internal class SchemaTools
         try
         {
             var databases = await _analyzer.ListDatabasesAsync();
-            return $"Available databases ({databases.Count}):\n" +
-                string.Join("\n", databases.Select(db => $"- {db}"));
+
+            var visibleDatabases = databases;
+            var allowedEnv = Environment.GetEnvironmentVariable("NO2SQL_ALLOWED_DATABASES");
+            if (!string.IsNullOrWhiteSpace(allowedEnv))
+            {
+                var allowed = allowedEnv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                visibleDatabases = databases.Where(db => allowed.Contains(db)).ToList();
+            }
+
+            var output = $"Available databases ({visibleDatabases.Count}):\n" +
+                string.Join("\n", visibleDatabases.Select(db => $"- {db}"));
+            return output;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in ListDatabases: {ex.Message}\n{ex.StackTrace}");
-            return $"Error listing databases: {ex.Message}";
+            return HandleToolError("listing databases", ex);
         }
     }
 
@@ -76,20 +74,22 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+
             var res = await _analyzer.GetFieldRelationshipsAsync(databaseName);
             if (res.Count == 0)
             {
                 return $"No ID-like fields found in database '{databaseName}'.";
             }
 
-            return $"ID-like fields in '{databaseName}':\n" +
+            var output = $"ID-like fields in '{databaseName}':\n" +
                 string.Join("\n", res.Select(kvp =>
                     $"- Collection '{kvp.Key}': {string.Join(", ", kvp.Value)}"));
+            return output;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in ListInferredRelationships: {ex.Message}\n{ex.StackTrace}");
-            return $"Error listing inferred relationships for database '{databaseName}': {ex.Message}";
+            return HandleToolError("listing inferred relationships", ex, databaseName);
         }
     }
 
@@ -101,21 +101,23 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+
             var res = await _analyzer.GetRelationshipsAsync(databaseName);
             if (res.Count == 0)
             {
                 return $"No inferred relationships found by comparing Id Like fields to _id values for database '{databaseName}'.";
             }
-            return $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
+
+            var output = $"Inferred Relationships by comparing Id Like fields to _id values for database '{databaseName}':\n" +
                 string.Join("\n", res.Select(r =>
-                    $"- {r.FromCollection}' -> To Collection '{r.ToCollection}' " +
+                    $"- '{r.FromCollection}' -> To Collection '{r.ToCollection}' " +
                     $"via Field '{r.FieldName}' ({r.Confidence:P2})"));
+            return output;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}");
-            Console.Error.WriteLine($"Error in CompareIdFieldsToIds: {ex.Message}\n{ex.StackTrace}");
-            return $"Error comparing Id Like fields to _id values for database '{databaseName}': {ex.Message}";
+            return HandleToolError("comparing Id-like fields to _id values", ex, databaseName);
         }
     }
 
@@ -126,6 +128,8 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+
             var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
             var sqlSchema = _scriptGenerator.GenerateSqlFromInference(collections, relationships);
@@ -133,41 +137,51 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}");
-            Console.Error.WriteLine($"Error in GenerateSqlSchema: {ex.Message}\n{ex.StackTrace}");
-            return $"Error generating SQL schema for database '{databaseName}': {ex.Message}";
+            return HandleToolError("generating SQL schema", ex, databaseName);
         }
     }
 
     [McpServerTool]
     [Description("Generate SQL schema with optional user-provided relationships.")]
-    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride> overrides = null)
+    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride>? overrides = null)
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+            overrides = _guardrails.ValidateOverrides(overrides);
+
             var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var inferred = await _analyzer.GetRelationshipsAsync(databaseName);
 
             if (overrides == null || overrides.Count == 0)
+            {
                 return _scriptGenerator.GenerateSqlFromInference(collections, inferred);
+            }
 
             return _scriptGenerator.GenerateSqlWithOverrides(collections, inferred, overrides);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSqlSchemaAdvanced: {ex}");
-            throw;
+            var message = HandleToolError("generating advanced SQL schema", ex, databaseName);
+            return new SqlSchemaOutput
+            {
+                ErrorMessage = message
+            };
         }
     }
 
     [McpServerTool]
-    [Description("Generate SQL INSERT statements for all documents in a MongoDB collection.")]
+    [Description(
+    "Generate SQL INSERT statements for documents in a MongoDB collection. "
+    )]
     public async Task<List<string>> GenerateSeedersForCollection(
     [Description("Database name")] string databaseName,
     [Description("Collection name")] string collectionName)
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+            collectionName = _guardrails.ValidateCollectionName(collectionName);
 
             var response = await _scriptGenerator.GenerateInsertStatementsForCollection(databaseName, collectionName);
             if (response == null || response.Count == 0)
@@ -175,12 +189,16 @@ internal class SchemaTools
                 Console.Error.WriteLine($"No documents found in collection '{collectionName}' of database '{databaseName}'.");
                 return [];
             }
+
             return response;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error in GenerateSeedersForCollection: {ex}");
-            throw;
+            var message = HandleToolError(
+                "generating SQL seeders",
+                ex,
+                $"{SanitizeLabel(databaseName)}.{SanitizeLabel(collectionName)}");
+            throw new InvalidOperationException(message);
         }
     }
 
@@ -191,6 +209,9 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+            source = _guardrails.ValidateSource(source);
+
             var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
 
@@ -227,7 +248,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating Mermaid ERD: {ex.Message}";
+            return HandleToolError("generating Mermaid ERD", ex, databaseName);
         }
     }
 
@@ -237,6 +258,9 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+            source = _guardrails.ValidateSource(source);
+
             var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
 
@@ -273,7 +297,7 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating PlantUML ERD: {ex.Message}";
+            return HandleToolError("generating PlantUML ERD", ex, databaseName);
         }
     }
 
@@ -283,6 +307,9 @@ internal class SchemaTools
     {
         try
         {
+            databaseName = _guardrails.ValidateDatabaseName(databaseName);
+            source = _guardrails.ValidateSource(source);
+
             var schemas = await _analyzer.AnalyzeCollectionsAsync(databaseName);
             var relationships = await _analyzer.GetRelationshipsAsync(databaseName);
 
@@ -319,8 +346,36 @@ internal class SchemaTools
         }
         catch (Exception ex)
         {
-            return $"Error generating DOT ERD: {ex.Message}";
+            return HandleToolError("generating DOT ERD", ex, databaseName);
         }
+    }
+
+    private static string HandleToolError(string operation, Exception ex, string? subject = null)
+    {
+        var errorId = Guid.NewGuid().ToString("N")[..8];
+        var subjectSuffix = string.IsNullOrWhiteSpace(subject) ? string.Empty : $" for '{SanitizeLabel(subject)}'";
+
+        Console.Error.WriteLine(
+            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {ex.GetType().Name}: {ex.Message}");
+
+        return $"Unable to complete {operation}{subjectSuffix}. See server logs with error id {errorId}.";
+    }
+
+    private static string SanitizeLabel(string input)
+    {
+        var trimmed = input.Trim();
+        if (trimmed.Length == 0)
+        {
+            return "(empty)";
+        }
+
+        var compact = trimmed
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Replace("\t", " ");
+
+        const int maxLength = 120;
+        return compact.Length <= maxLength ? compact : compact[..maxLength] + "...";
     }
 
 }

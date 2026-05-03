@@ -7,11 +7,20 @@ using System.Threading.Tasks;
 using No2SQL.Utils;
 using No2SQL.Sql.Models;
 using System.Text;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using MongoDB.Bson.IO;
 namespace No2SQL.Sql;
 
 public class ScriptGenerator
 {
     private readonly MongoClient _client;
+    private static readonly IFormatProvider Invariant = CultureInfo.InvariantCulture;
+    private static readonly JsonWriterSettings CompactJsonSettings = new()
+    {
+        Indent = false,
+        OutputMode = JsonOutputMode.RelaxedExtendedJson
+    };
 
     public ScriptGenerator(string? connectionString)
     {
@@ -25,6 +34,7 @@ public class ScriptGenerator
     public SqlSchemaOutput GenerateSqlFromInference(List<CollectionSchema> collections, List<Relationship> relationships)
     {
         var output = new SqlSchemaOutput();
+        var collectionDict = collections.ToDictionary(c => c.Name, c => c);
 
         // 1. Generate tables
         foreach (var col in collections)
@@ -44,7 +54,7 @@ public class ScriptGenerator
         // 2. Generate foreign keys
         foreach (var rel in relationships)
         {
-            var targetCollection = collections.FirstOrDefault(c => c.Name == rel.ToCollection);
+            var targetCollection = collectionDict.GetValueOrDefault(rel.ToCollection);
             if (targetCollection == null)
                 continue; // Should not happen, but just in case
             var pkField = targetCollection.PrimaryKey;
@@ -85,59 +95,144 @@ public class ScriptGenerator
 
     public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName)
     {
-        var db = _client.GetDatabase(databaseName);
-        var collection = db.GetCollection<BsonDocument>(collectionName);
+        var statements = new List<string>();
 
-        var docs = await collection
-            .Find(FilterDefinition<BsonDocument>.Empty)
-            .ToListAsync();
-
-        if (docs.Count == 0)
-            return [];
-
-        // Collect all unique columns across all documents
-        var allColumns = docs
-            .SelectMany(d => d.Elements.Select(e => e.Name))
-            .Distinct()
-            .ToList();
-
-        // Format column list
-        var columnSql = allColumns
-            .Select(c => $"    `{c}`")
-            .ToList();
-
-        // Build VALUES blocks
-        var valueBlocks = new List<string>();
-
-        foreach (var doc in docs)
+        await foreach (var statement in GenerateInsertStatementsForCollectionStream(databaseName, collectionName))
         {
-            var rowValues = new List<string>();
-
-            foreach (var col in allColumns)
-            {
-                if (doc.Contains(col))
-                    rowValues.Add($"    {ToSqlLiteralPretty(doc[col])}");
-                else
-                    rowValues.Add("    NULL");
-            }
-
-            var block =
-    $@"(
-{string.Join(",\n", rowValues)}
-)";
-            valueBlocks.Add(block);
+            statements.Add(statement);
         }
 
-        // Final SQL
-        var sql =
-    $@"INSERT INTO `{collectionName}` (
-{string.Join(",\n", columnSql)}
-) VALUES
-{string.Join(",\n,\n", valueBlocks)}
-;
-";
+        return statements;
+    }
 
-        return new List<string> { NormalizeIndentation(sql) };
+    public async IAsyncEnumerable<string> GenerateInsertStatementsForCollectionStream(
+        string databaseName,
+        string collectionName,
+        int batchSize = 100,
+        int limit = 1000,
+        int rowsPerChunk = 100,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(databaseName))
+        {
+            throw new ArgumentException("Database name cannot be null or empty.", nameof(databaseName));
+        }
+
+        if (string.IsNullOrWhiteSpace(collectionName))
+        {
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(collectionName));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than zero.");
+        }
+
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than zero.");
+        }
+
+        if (rowsPerChunk <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowsPerChunk), "Rows per chunk must be greater than zero.");
+        }
+
+        var db = _client.GetDatabase(databaseName);
+        var collection = db.GetCollection<BsonDocument>(collectionName);
+        var filter = new BsonDocument();
+
+        var options = new FindOptions<BsonDocument>
+        {
+            BatchSize = batchSize,
+            Limit = limit
+        };
+
+        // Pass 1: discover a deterministic column set using first-seen order.
+        var seenColumns = new HashSet<string>(StringComparer.Ordinal);
+        var orderedColumns = new List<string>();
+
+        using (IAsyncCursor<BsonDocument> discoveryCursor = await collection.FindAsync(filter, options, cancellationToken))
+        {
+            while (await discoveryCursor.MoveNextAsync(cancellationToken))
+            {
+                foreach (BsonDocument document in discoveryCursor.Current)
+                {
+                    foreach (var element in document.Elements)
+                    {
+                        if (seenColumns.Add(element.Name))
+                        {
+                            orderedColumns.Add(element.Name);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (orderedColumns.Count == 0)
+        {
+            yield break;
+        }
+
+        // Pass 2: emit independently executable INSERT chunks with bounded memory.
+        var chunkRows = new List<string>(rowsPerChunk);
+
+        using (IAsyncCursor<BsonDocument> dataCursor = await collection.FindAsync(filter, options, cancellationToken))
+        {
+            while (await dataCursor.MoveNextAsync(cancellationToken))
+            {
+                foreach (BsonDocument document in dataCursor.Current)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var rowValues = new List<string>(orderedColumns.Count);
+                    foreach (var column in orderedColumns)
+                    {
+                        if (document.TryGetValue(column, out var value))
+                        {
+                            rowValues.Add($"    {ToSqlLiteralPretty(value)}");
+                        }
+                        else
+                        {
+                            rowValues.Add("    NULL");
+                        }
+                    }
+
+                    var rowBlock =
+$@"(
+{string.Join(",\n", rowValues)}
+)";
+
+                    chunkRows.Add(rowBlock);
+
+                    if (chunkRows.Count == rowsPerChunk)
+                    {
+                        yield return BuildInsertChunk(collectionName, orderedColumns, chunkRows);
+                        chunkRows.Clear();
+                    }
+                }
+            }
+        }
+
+        if (chunkRows.Count > 0)
+        {
+            yield return BuildInsertChunk(collectionName, orderedColumns, chunkRows);
+        }
+    }
+
+    private static string BuildInsertChunk(string collectionName, List<string> columns, List<string> rowBlocks)
+    {
+        var columnSql = string.Join(",\n", columns.Select(c => $"    {QuoteIdentifier(c)}"));
+        var valuesSql = string.Join(",\n", rowBlocks);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"INSERT INTO {QuoteIdentifier(collectionName)} (");
+        sb.AppendLine(columnSql);
+        sb.AppendLine(") VALUES");
+        sb.AppendLine(valuesSql);
+        sb.AppendLine(";");
+
+        return sb.ToString();
     }
 
     private static SqlTableDefinition GenerateCreateTable(string collectionName, Dictionary<string, BsonType> fields, string primaryKey)
@@ -162,14 +257,14 @@ public class ScriptGenerator
             });
 
             columnSql.Add(
-                $"  `{field.Key}` {sqlType} {(field.Key == primaryKey ? "NOT NULL" : "")}"
+                $"  {QuoteIdentifier(field.Key)} {sqlType} {(field.Key == primaryKey ? "NOT NULL" : "")}"
             );
         }
 
-        columnSql.Add($"  PRIMARY KEY (`{primaryKey}`)");
+        columnSql.Add($"  PRIMARY KEY ({QuoteIdentifier(primaryKey)})");
 
         table.CreateTableSql =
-                $@"CREATE TABLE `{collectionName}` (
+                $@"CREATE TABLE {QuoteIdentifier(collectionName)} (
             {string.Join(",\n", columnSql)}
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
@@ -185,7 +280,7 @@ public class ScriptGenerator
             Table = table,
             Column = column,
             IndexName = indexName,
-            Sql = $"CREATE INDEX `{indexName}` ON `{table}`(`{column}`);"
+            Sql = $"CREATE INDEX {QuoteIdentifier(indexName)} ON {QuoteIdentifier(table)}({QuoteIdentifier(column)});"
         };
     }
 
@@ -194,10 +289,10 @@ public class ScriptGenerator
         var fkName = $"fk_{rel.FromCollection}_{rel.ToCollection}_{rel.FieldName}";
 
         var sql =
-            $@"ALTER TABLE `{rel.FromCollection}`
-        ADD CONSTRAINT `{fkName}`
-        FOREIGN KEY (`{rel.FieldName}`)
-        REFERENCES `{rel.ToCollection}`(`{pkField}`)
+            $@"ALTER TABLE {QuoteIdentifier(rel.FromCollection)}
+        ADD CONSTRAINT {QuoteIdentifier(fkName)}
+        FOREIGN KEY ({QuoteIdentifier(rel.FieldName)})
+        REFERENCES {QuoteIdentifier(rel.ToCollection)}({QuoteIdentifier(pkField)})
         ON DELETE SET NULL;";
 
         return new SqlForeignKeyDefinition
@@ -238,47 +333,76 @@ public class ScriptGenerator
 
     private static string ToSqlLiteralPretty(BsonValue value)
     {
-        if (value.IsBsonNull) return "NULL";
+        if (value == null || value.IsBsonNull)
+            return "NULL";
 
         return value.BsonType switch
         {
             BsonType.String => $"'{Escape(value.AsString)}'",
             BsonType.ObjectId => $"'{value.AsObjectId.ToString()}'",
-            BsonType.Int32 => value.AsInt32.ToString(),
-            BsonType.Int64 => value.AsInt64.ToString(),
-            BsonType.Double => value.AsDouble.ToString(),
+            BsonType.Int32 => value.AsInt32.ToString(Invariant),
+            BsonType.Int64 => value.AsInt64.ToString(Invariant),
+            BsonType.Double => value.AsDouble.ToString(Invariant),
+            BsonType.Decimal128 => value.AsDecimal.ToString(Invariant),
             BsonType.Boolean => value.AsBoolean ? "TRUE" : "FALSE",
             BsonType.DateTime => $"'{value.ToUniversalTime():yyyy-MM-dd HH:mm:ss}'",
 
             BsonType.Array or BsonType.Document =>
-                $"'{Escape(value.ToJson(new MongoDB.Bson.IO.JsonWriterSettings
-                {
-                    Indent = true,
-                    IndentChars = "    "
-                }))}'",
+                $"'{Escape(value.ToJson(CompactJsonSettings))}'",
 
-            _ => $"'{Escape(value.ToString())}'"
+            _ => $"'{Escape(value.ToString() ?? string.Empty)}'"
         };
     }
 
-    private static string NormalizeIndentation(string sql)
+    private static string Escape(string input)
     {
-        var lines = sql.Replace("\r", "").Split('\n');
+        if (string.IsNullOrEmpty(input))
+            return input;
 
-        var minIndent = lines
-            .Where(l => l.Trim().Length > 0)
-            .Select(l => l.TakeWhile(Char.IsWhiteSpace).Count())
-            .DefaultIfEmpty(0)
-            .Min();
+        var sb = new StringBuilder(input.Length + 16);
 
-        var normalized = string.Join("\n", lines.Select(l =>
-            l.Length >= minIndent ? l[minIndent..] : l
-        ));
+        foreach (var ch in input)
+        {
+            switch (ch)
+            {
+                case '\'':
+                    sb.Append("''");      // SQL single-quote escape
+                    break;
+                case '\\':
+                    sb.Append("\\\\");    // Escape backslash
+                    break;
+                case '\n':
+                    sb.Append("\\n");     // Literal \n
+                    break;
+                case '\r':
+                    sb.Append("\\r");
+                    break;
+                case '\t':
+                    sb.Append("\\t");
+                    break;
+                default:
+                    sb.Append(ch);
+                    break;
+            }
+        }
 
-        return normalized.Trim() + "\n";
-
-
+        return sb.ToString();
     }
-    private static string Escape(string s) => s.Replace("'", "''");
+
+    private static string QuoteIdentifier(string identifier)
+    {
+        return $"`{EscapeIdentifier(identifier)}`";
+    }
+
+    private static string EscapeIdentifier(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            throw new ArgumentException("SQL identifier cannot be null or whitespace.", nameof(identifier));
+        }
+
+        // MySQL identifier escaping: embedded backticks are escaped by doubling.
+        return identifier.Replace("`", "``");
+    }
 
 }

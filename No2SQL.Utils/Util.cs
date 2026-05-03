@@ -12,7 +12,7 @@ namespace No2SQL.Utils
             return name;
         }
 
-        public static string NormalizeId(BsonValue value)
+        public static string? NormalizeId(BsonValue value)
         {
             if (value == null || value.IsBsonNull)
                 return null;

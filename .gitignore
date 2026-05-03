@@ -46,6 +46,7 @@ coverage/
 
 # Publish outputs
 publish/
+artifacts/
 
 # Secrets / environment
 .env

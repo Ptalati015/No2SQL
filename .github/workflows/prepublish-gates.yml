@@ -1,0 +1,83 @@
+name: Prepublish Gates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  quality-and-security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore No2SQL.sln
+
+      - name: Build Release
+        run: dotnet build No2SQL.sln -c Release --no-restore
+
+      - name: Scan vulnerable packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -qi "has the following vulnerable packages" vulnerable.txt; then
+            echo "Vulnerable packages detected."
+            exit 1
+          fi
+
+      - name: Report outdated packages (informational)
+        shell: bash
+        run: dotnet list No2SQL.sln package --outdated --include-transitive | tee outdated.txt
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack MCP NuGet artifacts
+        run: dotnet pack No2SQL/No2SQL.csproj -c Release -o artifacts/pack
+
+      - name: Verify packages contain no pdb files
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for pkg in artifacts/pack/*.nupkg; do
+            echo "Checking $pkg"
+            if unzip -l "$pkg" | grep -Ei "\\.pdb$"; then
+              echo "PDB file detected in $pkg"
+              exit 1
+            fi
+          done
+
+      - name: Verify MCP manifest in main package
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_PKG="artifacts/pack/No2SQL.0.1.0-beta.nupkg"
+          unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
+
+      - name: Upload packed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: no2sql-packages
+          path: artifacts/pack/*.nupkg

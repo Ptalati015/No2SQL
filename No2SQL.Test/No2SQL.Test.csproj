@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\No2SQL\No2SQL.csproj" />
     <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />
     <ProjectReference Include="..\No2SQL.Sql\No2SQL.Sql.csproj" />
     <ProjectReference Include="..\No2SQL.Visuals\No2SQL.Visuals.csproj" />

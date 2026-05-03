@@ -47,6 +47,26 @@ Example value format:
 mongodb+srv://<username>:<password>@<cluster-host>/<database>?retryWrites=true&w=majority
 ```
 
+### Security guardrails for production
+
+The server includes built-in guardrails for malicious or abusive prompting. Configure these before go-live:
+
+- `NO2SQL_ALLOWED_DATABASES`: Optional comma-separated allowlist of database names. If set, all tool calls are restricted to this list.
+- `NO2SQL_BLOCK_SYSTEM_DATABASES`: `true` by default. Blocks `admin`, `config`, and `local`.
+
+Additionally, tool inputs are validated for:
+
+- `databaseName`
+- `collectionName`
+- `source` (`sql`, `mongo`, `auto`)
+- Override fields (`fromCollection`, `fromField`, `toCollection`, `toField`)
+- Prompt-injection marker patterns in input arguments
+
+Recommended production baseline:
+
+1. Set `NO2SQL_ALLOWED_DATABASES` to only migration-safe databases.
+2. Keep `NO2SQL_BLOCK_SYSTEM_DATABASES=true`.
+
 To test this MCP server from source code (locally) without using a built MCP server package, you can configure your IDE to run the project directly using `dotnet run`.
 
 ```json

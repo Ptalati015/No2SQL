@@ -1,0 +1,8 @@
+# Default owner for all files in the repository.
+* @Ptalati015
+
+# Security and release-sensitive paths.
+/.github/ @Ptalati015
+/No2SQL/.mcp/ @Ptalati015
+/No2SQL/appsettings.json @Ptalati015
+/No2SQL/No2SQL.csproj @Ptalati015

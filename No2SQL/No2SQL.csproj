@@ -21,7 +21,7 @@
     <!-- Set recommended package metadata -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageId>No2SQL</PackageId>
-    <PackageVersion>0.1.0-beta</PackageVersion>
+    <PackageVersion>0.1.0</PackageVersion>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
     <Description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</Description>
     <Authors>Preet Talati</Authors>
@@ -30,7 +30,7 @@
     <RepositoryUrl>https://github.com/Ptalati015/No2SQL</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReleaseNotes>Initial beta release of the No2SQL MCP server package.</PackageReleaseNotes>
+    <PackageReleaseNotes>Initial stable release of the No2SQL MCP server package.</PackageReleaseNotes>
   </PropertyGroup>
 
   <!-- Include additional files for browsing the MCP server. -->

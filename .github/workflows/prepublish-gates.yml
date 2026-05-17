@@ -40,8 +40,12 @@ jobs:
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
 
-          # Allow this known advisory for SharpCompress until upstream fix is available.
+          # Temporary exception for SharpCompress advisory GHSA-6c8g-7p36-r338.
+          # Tracking reference: TODO: replace with the concrete issue/PR URL that owns this exception.
+          # Removal trigger: delete this allowlist entry once No2SQL depends on a SharpCompress
+          # version that no longer reports GHSA-6c8g-7p36-r338 in `dotnet list package --vulnerable`.
           ALLOWED_ADVISORY="GHSA-6c8g-7p36-r338"
+          ALLOWED_ADVISORY_REMOVAL_CONDITION="Remove when SharpCompress is upgraded past the vulnerable range and this GHSA no longer appears in the vulnerability report."
 
           has_markers=false
           if grep -qiE 'Severity|Advisory URL' vulnerable.txt; then

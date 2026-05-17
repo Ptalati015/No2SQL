@@ -44,11 +44,10 @@ jobs:
           # Remove SharpCompress advisory (GHSA-6c8g-7p36-r338)
           # Remove the entire block for that package
           awk '
-            BEGIN { skip=0 }
-            /SharpCompress/ { skip=1 }
-            skip && NF==0 { skip=0; next }
-            !skip
-          ' vulnerable_raw.txt > vulnerable_filtered.txt
+            BEGIN { RS=""; ORS="\n\n" }
+             $0 ~ /SharpCompress/ && $0 ~ /GHSA-6c8g-7p36-r338/ { next }
+             { print }
+          ' vulnerable.txt > vulnerable_filtered.txt
 
           echo "Filtered vulnerability report:"
           cat vulnerable_filtered.txt

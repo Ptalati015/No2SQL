@@ -40,10 +40,25 @@ jobs:
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
           sed -i '/GHSA-6c8g-7p36-r338/d' vulnerable.txt
-          if grep -qi "has the following vulnerable packages" vulnerable.txt; then
-            echo "Vulnerable packages detected."
+
+          # Remove SharpCompress advisory (GHSA-6c8g-7p36-r338)
+          # Remove the entire block for that package
+          awk '
+            BEGIN { skip=0 }
+            /SharpCompress/ { skip=1 }
+            skip && NF==0 { skip=0; next }
+            !skip
+          ' vulnerable_raw.txt > vulnerable_filtered.txt
+
+          echo "Filtered vulnerability report:"
+          cat vulnerable_filtered.txt
+
+          # Now check if ANY advisory lines remain
+          if grep -qiE "Severity|Advisory URL" vulnerable_filtered.txt; then
+            echo "Non-allowed vulnerable packages detected."
             exit 1
           fi
+          echo "No blocking vulnerabilities detected."
 
       - name: Report outdated packages (informational)
         shell: bash

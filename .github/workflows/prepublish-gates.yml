@@ -55,8 +55,10 @@ jobs:
           # Collect unique advisory IDs from the report (if any).
           mapfile -t advisories < <(grep -Eo 'GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}' vulnerable.txt | sort -u || true)
 
-          # Collect advisory URLs so non-GHSA advisories are still enforced.
-          mapfile -t advisory_urls < <(grep -iE 'Advisory URL' vulnerable.txt | grep -Eio 'https?://[^[:space:]]+' | sed 's/[),.;:]$//' | sort -u || true)
+          # Collect advisory URLs from the full report so non-GHSA advisories are enforced
+          # even when `dotnet list ... --vulnerable` prints URLs on package rows rather than
+          # on the "Advisory URL" header line.
+          mapfile -t advisory_urls < <(grep -Eio 'https?://[^[:space:]]+' vulnerable.txt | sed 's/[),.;:]$//' | sort -u || true)
 
           blocking=()
           for advisory in "${advisories[@]}"; do

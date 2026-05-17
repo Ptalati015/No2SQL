@@ -43,8 +43,16 @@ jobs:
           # Allow this known advisory for SharpCompress until upstream fix is available.
           ALLOWED_ADVISORY="GHSA-6c8g-7p36-r338"
 
+          has_markers=false
+          if grep -qiE 'Severity|Advisory URL' vulnerable.txt; then
+            has_markers=true
+          fi
+
           # Collect unique advisory IDs from the report (if any).
           mapfile -t advisories < <(grep -Eo 'GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}' vulnerable.txt | sort -u || true)
+
+          # Collect advisory URLs so non-GHSA advisories are still enforced.
+          mapfile -t advisory_urls < <(grep -Eio 'https?://[^[:space:]]+' vulnerable.txt | sed 's/[),.;:]$//' | sort -u || true)
 
           blocking=()
           for advisory in "${advisories[@]}"; do
@@ -53,13 +61,31 @@ jobs:
             fi
           done
 
+          blocking_urls=()
+          for url in "${advisory_urls[@]}"; do
+            if [[ "$url" != *"$ALLOWED_ADVISORY"* ]]; then
+              blocking_urls+=("$url")
+            fi
+          done
+
           if (( ${#blocking[@]} > 0 )); then
             echo "Blocking advisories detected: ${blocking[*]}"
             exit 1
           fi
 
-          if (( ${#advisories[@]} > 0 )); then
-            echo "Only allowed advisory found (${ALLOWED_ADVISORY}); passing gate."
+          if (( ${#blocking_urls[@]} > 0 )); then
+            echo "Blocking advisory URLs detected: ${blocking_urls[*]}"
+            exit 1
+          fi
+
+          # Defensive fallback: markers indicate vulnerabilities, but no parseable IDs/URLs were found.
+          if [[ "$has_markers" == true ]] && (( ${#advisories[@]} == 0 )) && (( ${#advisory_urls[@]} == 0 )); then
+            echo "Vulnerability markers detected but no advisory IDs/URLs were parsed. Failing gate defensively."
+            exit 1
+          fi
+
+          if (( ${#advisories[@]} > 0 )) || (( ${#advisory_urls[@]} > 0 )); then
+            echo "Only allowed advisories found (${ALLOWED_ADVISORY}); passing gate."
           else
             echo "No vulnerable packages detected."
           fi

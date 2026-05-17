@@ -134,7 +134,7 @@ dotnet pack -c Release
 Publish NuGet package:
 
 ```bash
-dotnet nuget push artifacts/release/*.nupkg --api-key <your-api-key> --source https://api.nuget.org/v3/index.json
+dotnet nuget push **/bin/Release/*.nupkg --api-key <your-api-key> --source https://api.nuget.org/v3/index.json
 ```
 
 ## Local Test Defaults

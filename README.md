@@ -41,7 +41,7 @@ For VS Code, create `.vscode/mcp.json`:
 			"args": [
 				"No2SQL",
 				"--version",
-				"0.1.0",
+				"1.0.0",
 				"--yes"
 			]
 		}

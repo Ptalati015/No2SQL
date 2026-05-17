@@ -39,25 +39,30 @@ jobs:
         run: |
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
-          sed -i '/GHSA-6c8g-7p36-r338/d' vulnerable.txt
 
-          # Remove SharpCompress advisory (GHSA-6c8g-7p36-r338)
-          # Remove the entire block for that package
-          awk '
-            BEGIN { RS=""; ORS="\n\n" }
-             $0 ~ /SharpCompress/ && $0 ~ /GHSA-6c8g-7p36-r338/ { next }
-             { print }
-          ' vulnerable.txt > vulnerable_filtered.txt
+          # Allow this known advisory for SharpCompress until upstream fix is available.
+          ALLOWED_ADVISORY="GHSA-6c8g-7p36-r338"
 
-          echo "Filtered vulnerability report:"
-          cat vulnerable_filtered.txt
+          # Collect unique advisory IDs from the report (if any).
+          mapfile -t advisories < <(grep -Eo 'GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}' vulnerable.txt | sort -u || true)
 
-          # Now check if ANY advisory lines remain
-          if grep -qiE "Severity|Advisory URL" vulnerable_filtered.txt; then
-            echo "Non-allowed vulnerable packages detected."
+          blocking=()
+          for advisory in "${advisories[@]}"; do
+            if [[ "$advisory" != "$ALLOWED_ADVISORY" ]]; then
+              blocking+=("$advisory")
+            fi
+          done
+
+          if (( ${#blocking[@]} > 0 )); then
+            echo "Blocking advisories detected: ${blocking[*]}"
             exit 1
           fi
-          echo "No blocking vulnerabilities detected."
+
+          if (( ${#advisories[@]} > 0 )); then
+            echo "Only allowed advisory found (${ALLOWED_ADVISORY}); passing gate."
+          else
+            echo "No vulnerable packages detected."
+          fi
 
       - name: Report outdated packages (informational)
         shell: bash

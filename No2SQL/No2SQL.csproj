@@ -6,6 +6,7 @@
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAuditSuppress>https://github.com/advisories/GHSA-6c8g-7p36-r338</NuGetAuditSuppress>
 
     <!-- Set up the NuGet package to be an MCP server -->
     <PackAsTool>true</PackAsTool>

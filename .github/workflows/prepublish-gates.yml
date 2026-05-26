@@ -33,16 +33,31 @@ jobs:
 
       - name: Build Release
         run: dotnet build No2SQL.sln -c Release --no-restore
-
+        
       - name: Scan vulnerable packages
         shell: bash
         run: |
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
-          if grep -qi "has the following vulnerable packages" vulnerable.txt; then
-            echo "Vulnerable packages detected."
+
+          # Suppress known advisories with no upstream fix available yet
+          SUPPRESSED=(
+            "GHSA-6c8g-7p36-r338"  # SharpCompress CVE-2026-44788 - no fix available as of 2026-05
+          )
+
+          FILTERED="$(cat vulnerable.txt)"
+          for advisory in "${SUPPRESSED[@]}"; do
+            FILTERED="$(echo "$FILTERED" | grep -v "$advisory")"
+          done
+
+          # Check for any remaining advisory URLs, not the project headers
+          if echo "$FILTERED" | grep -qE "https://github.com/advisories/GHSA-"; then
+            echo "Unsuppressed vulnerable packages detected:"
+            echo "$FILTERED"
             exit 1
           fi
+
+          echo "No unsuppressed vulnerabilities found."
 
       - name: Report outdated packages (informational)
         shell: bash
@@ -73,7 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MAIN_PKG="artifacts/pack/No2SQL.0.1.0.nupkg"
+          MAIN_PKG="artifacts/pack/No2SQL.1.0.0.nupkg"
           unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
 
       - name: Upload packed artifacts

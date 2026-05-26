@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
 
-          # Remove known advisories with no upstream fix available yet
+          # Suppress known advisories with no upstream fix available yet
           SUPPRESSED=(
             "GHSA-6c8g-7p36-r338"  # SharpCompress CVE-2026-44788 - no fix available as of 2026-05
           )
@@ -50,7 +50,8 @@ jobs:
             FILTERED="$(echo "$FILTERED" | grep -v "$advisory")"
           done
 
-          if echo "$FILTERED" | grep -qi "has the following vulnerable packages"; then
+          # Check for any remaining advisory URLs, not the project headers
+          if echo "$FILTERED" | grep -qE "https://github.com/advisories/GHSA-"; then
             echo "Unsuppressed vulnerable packages detected:"
             echo "$FILTERED"
             exit 1

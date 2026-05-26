@@ -39,25 +39,10 @@ jobs:
         run: |
           set -euo pipefail
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
-          sed -i '/GHSA-6c8g-7p36-r338/d' vulnerable.txt
-
-          # Remove SharpCompress advisory (GHSA-6c8g-7p36-r338)
-          # Remove the entire block for that package
-          awk '
-            BEGIN { RS=""; ORS="\n\n" }
-             $0 ~ /SharpCompress/ && $0 ~ /GHSA-6c8g-7p36-r338/ { next }
-             { print }
-          ' vulnerable.txt > vulnerable_filtered.txt
-
-          echo "Filtered vulnerability report:"
-          cat vulnerable_filtered.txt
-
-          # Now check if ANY advisory lines remain
-          if grep -qiE "Severity|Advisory URL" vulnerable_filtered.txt; then
-            echo "Non-allowed vulnerable packages detected."
+          if grep -qi "has the following vulnerable packages" vulnerable.txt; then
+            echo "Vulnerable packages detected."
             exit 1
           fi
-          echo "No blocking vulnerabilities detected."
 
       - name: Report outdated packages (informational)
         shell: bash
@@ -88,7 +73,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MAIN_PKG="artifacts/pack/No2SQL.1.0.0.nupkg"
+          MAIN_PKG="artifacts/pack/No2SQL.0.1.0.nupkg"
           unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
 
       - name: Upload packed artifacts

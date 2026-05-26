@@ -6,9 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   
-  <PropertyGroup>
-    <NuGetAuditSuppress>https://github.com/advisories/GHSA-6c8g-7p36-r338</NuGetAuditSuppress>
- </PropertyGroup>
   
   <ItemGroup>
     <ProjectReference Include="..\No2SQL.Core\No2SQL.Core.csproj" />

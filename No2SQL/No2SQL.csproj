@@ -32,10 +32,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReleaseNotes>Initial stable release of the No2SQL MCP server package.</PackageReleaseNotes>
   </PropertyGroup>
-  
-  <PropertyGroup>
-    <NuGetAuditSuppress>https://github.com/advisories/GHSA-6c8g-7p36-r338</NuGetAuditSuppress>
-  </PropertyGroup>
+
   <!-- Include additional files for browsing the MCP server. -->
   <ItemGroup>
     <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/" />

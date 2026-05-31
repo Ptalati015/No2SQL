@@ -9,7 +9,7 @@
 
     <!-- Set up the NuGet package to be an MCP server -->
     <PackAsTool>true</PackAsTool>
-    <PackageType>McpServer</PackageType>
+    <PackageType Condition="'$(RuntimeIdentifier)' == ''">McpServer</PackageType>
 
     <!-- Set up the MCP server to be a self-contained application that does not rely on a shared framework -->
     <SelfContained>true</SelfContained>

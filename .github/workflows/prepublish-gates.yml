@@ -34,6 +34,7 @@ jobs:
       - name: Build Release
         run: dotnet build No2SQL.sln -c Release --no-restore
         
+        
       - name: Scan vulnerable packages
         shell: bash
         run: |
@@ -54,8 +55,25 @@ jobs:
           if echo "$FILTERED" | grep -qE "https://github.com/advisories/GHSA-"; then
             echo "Unsuppressed vulnerable packages detected:"
             echo "$FILTERED"
+
+          # Suppress known advisories with no upstream fix available yet
+          SUPPRESSED=(
+            "GHSA-6c8g-7p36-r338"  # SharpCompress CVE-2026-44788 - no fix available as of 2026-05
+          )
+
+          FILTERED="$(cat vulnerable.txt)"
+          for advisory in "${SUPPRESSED[@]}"; do
+            FILTERED="$(echo "$FILTERED" | grep -v "$advisory")"
+          done
+
+          # Check for any remaining advisory URLs, not the project headers
+          if echo "$FILTERED" | grep -qE "https://github.com/advisories/GHSA-"; then
+            echo "Unsuppressed vulnerable packages detected:"
+            echo "$FILTERED"
             exit 1
           fi
+
+          echo "No unsuppressed vulnerabilities found."
 
           echo "No unsuppressed vulnerabilities found."
 

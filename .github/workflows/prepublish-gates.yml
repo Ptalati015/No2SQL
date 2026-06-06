@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          MAIN_PKG="artifacts/pack/No2SQL.1.0.0.nupkg"
+          MAIN_PKG="artifacts/pack/No2SQL.1.0.1.nupkg"
           unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
 
       - name: Upload packed artifacts

@@ -2,26 +2,17 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <RuntimeIdentifiers>win-x64;win-arm64;osx-arm64;linux-x64;linux-arm64;linux-musl-x64</RuntimeIdentifiers>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- Set up the NuGet package to be an MCP server -->
-    <PackAsTool>true</PackAsTool>
-    <PackageType>McpServer</PackageType>
+    <!-- MCP server should NOT be a dotnet tool -->
+    <PackAsTool>false</PackAsTool>
 
-    <!-- Set up the MCP server to be a self-contained application that does not rely on a shared framework -->
-    <SelfContained>true</SelfContained>
-    <PublishSelfContained>true</PublishSelfContained>
-
-    <!-- Set up the MCP server to be a single file executable -->
-    <PublishSingleFile>true</PublishSingleFile>
-
-    <!-- Set recommended package metadata -->
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Normal NuGet package metadata -->
     <PackageId>No2SQL</PackageId>
-    <PackageVersion>1.0.0</PackageVersion>
+    <PackageVersion>1.0.1</PackageVersion>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
     <Description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</Description>
     <Authors>Preet Talati</Authors>
@@ -30,10 +21,14 @@
     <RepositoryUrl>https://github.com/Ptalati015/No2SQL</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReleaseNotes>Initial stable release of the No2SQL MCP server package.</PackageReleaseNotes>
+
+    <!-- Self-contained multi-RID MCP server -->
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
-  <!-- Include additional files for browsing the MCP server. -->
   <ItemGroup>
     <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/" />
     <None Include="README.md" Pack="true" PackagePath="/" />
@@ -50,11 +45,5 @@
     <ProjectReference Include="..\No2SQL.Visuals\No2SQL.Visuals.csproj" />
     <ProjectReference Include="..\No2SQL.Utils\No2SQL.Utils.csproj" />
   </ItemGroup>
-
-  <Target Name="RemovePdbFilesFromReleasePublish" AfterTargets="ComputeFilesToPublish" Condition="'$(Configuration)' == 'Release'">
-    <ItemGroup>
-      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
-    </ItemGroup>
-  </Target>
 
 </Project>

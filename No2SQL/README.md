@@ -22,40 +22,83 @@ Example format:
 mongodb+srv://<username>:<password>@<cluster-host>/<database>?retryWrites=true&w=majority
 ```
 
-### Use from NuGet in VS Code
+## Installing the No2SQL MCP Server
 
-Create `.vscode/mcp.json`:
+The No2SQL MCP server is distributed as a standalone executable inside a NuGet package.  
+You do **NOT** need .NET installed and you do **NOT** need a .NET project.
+
+### 1. Download the package
+
+#### Option A — Using curl
+
+```
+curl -L https://www.nuget.org/api/v2/package/No2SQL/1.0.2 -o No2SQL.1.0.2.nupkg
+```
+
+#### Option B — Using PowerShell
+
+```
+Invoke-WebRequest https://www.nuget.org/api/v2/package/No2SQL/1.0.2 -OutFile No2SQL.1.0.2.nupkg
+```
+
+#### Option C — Download manually  
+Visit:  
+https://www.nuget.org/packages/No2SQL  
+and click **Download package**.
+
+---
+
+### 2. Extract the package
+
+A `.nupkg` is a ZIP archive:
+
+```
+unzip No2SQL.1.0.2.nupkg -d no2sql
+```
+
+Executables will be located under:
+
+```
+/tools/win-x64/No2SQL.exe
+/tools/linux-x64/No2SQL
+/tools/osx-arm64/No2SQL
+```
+
+---
+
+### 3. Configure your MCP client
+
+#### Claude Desktop
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
-  "servers": {
-    "No2SQL": {
-      "type": "stdio",
-      "command": "dnx",
-      "args": [
-        "No2SQL",
-        "--version",
-        "1.0.0",
-        "--yes"
-      ]
+  "mcpServers": {
+    "no2sql": {
+      "command": "path/to/no2sql/tools/win-x64/No2SQL.exe"
     }
   }
 }
 ```
 
-### Use from source during development
+#### VS Code MCP Extension
+
+```json
+"mcp.servers": {
+  "no2sql": {
+    "command": "path/to/no2sql/tools/win-x64/No2SQL.exe"
+  }
+}
+```
+
+#### GitHub Copilot MCP
 
 ```json
 {
-  "servers": {
-    "No2SQL": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "No2SQL"
-      ]
+  "mcpServers": {
+    "no2sql": {
+      "command": "path/to/no2sql/tools/win-x64/No2SQL.exe"
     }
   }
 }

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>No2SQL</id>
+    <version>1.0.2</version>
+    <authors>Preet Talati</authors>
+    <description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</description>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/Ptalati015/No2SQL</projectUrl>
+    <tags>AI MCP server stdio</tags>
+  </metadata>
+
+  <files>
+    <file src="No2SQL/.mcp/server.json" target=".mcp/server.json" />
+    <file src="README.md" target="README.md" />
+
+    <file src="artifacts/publish/win-x64/No2SQL.exe" target="tools/win-x64/No2SQL.exe" />
+    <file src="artifacts/publish/linux-x64/No2SQL" target="tools/linux-x64/No2SQL" />
+    <file src="artifacts/publish/osx-arm64/No2SQL" target="tools/osx-arm64/No2SQL" />
+  </files>
+</package>

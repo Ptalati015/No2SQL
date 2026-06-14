@@ -2,12 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "description": "No2SQL MCP server for inferring SQL schema and ER diagrams from MongoDB databases.",
   "name": "io.github.ptalati015/no2sql",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "packages": [
     {
       "registryType": "nuget",
       "identifier": "No2SQL",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "transport": {
         "type": "stdio"
       },

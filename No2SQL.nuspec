@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>No2SQL</id>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <authors>Preet Talati</authors>
     <description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</description>
     <license type="expression">MIT</license>

@@ -11,7 +11,7 @@
 
     <!-- Normal NuGet package metadata -->
     <PackageId>No2SQL</PackageId>
-    <PackageVersion>1.0.2</PackageVersion>
+    <PackageVersion>1.0.3</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
     <Description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</Description>

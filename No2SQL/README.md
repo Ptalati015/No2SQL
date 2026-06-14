@@ -32,13 +32,13 @@ You do **NOT** need .NET installed and you do **NOT** need a .NET project.
 #### Option A — Using curl
 
 ```
-curl -L https://www.nuget.org/api/v2/package/No2SQL/1.0.2 -o No2SQL.1.0.2.nupkg
+curl -L https://www.nuget.org/api/v2/package/No2SQL/1.0.3 -o No2SQL.1.0.3.nupkg
 ```
 
 #### Option B — Using PowerShell
 
 ```
-Invoke-WebRequest https://www.nuget.org/api/v2/package/No2SQL/1.0.2 -OutFile No2SQL.1.0.2.nupkg
+Invoke-WebRequest https://www.nuget.org/api/v2/package/No2SQL/1.0.3 -OutFile No2SQL.1.0.3.nupkg
 ```
 
 #### Option C — Download manually  
@@ -53,7 +53,7 @@ and click **Download package**.
 A `.nupkg` is a ZIP archive:
 
 ```
-unzip No2SQL.1.0.2.nupkg -d no2sql
+unzip No2SQL.1.0.3.nupkg -d no2sql
 ```
 
 Executables will be located under:

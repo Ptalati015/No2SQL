@@ -15,7 +15,28 @@
       "environmentVariables": [
         {
           "name": "NO2SQL_MONGO",
-          "description": "MongoDB connection string used by the No2SQL MCP server."
+          "description": "MongoDB connection string, including any credentials. Treat it as a secret and set it only in your MCP client's env config.",
+          "isRequired": true,
+          "isSecret": true,
+          "placeholder": "mongodb://localhost:27017"
+        },
+        {
+          "name": "NO2SQL_ALLOWED_DATABASES",
+          "description": "Comma-separated list of database names the server may read. Recommended: list only the databases you want analysed. Default (empty): every database not blocked by NO2SQL_BLOCK_SYSTEM_DATABASES.",
+          "isRequired": false,
+          "default": "",
+          "placeholder": "sales,inventory"
+        },
+        {
+          "name": "NO2SQL_BLOCK_SYSTEM_DATABASES",
+          "description": "When true (default), the MongoDB system databases admin, config and local are blocked. Keep it true unless you have a specific need.",
+          "isRequired": false,
+          "format": "boolean",
+          "default": "true",
+          "choices": [
+            "true",
+            "false"
+          ]
         }
       ]
     }

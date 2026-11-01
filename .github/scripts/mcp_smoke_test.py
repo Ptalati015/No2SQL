@@ -234,9 +234,10 @@ def run_without_mongo(command, args):
 
 
 def run_with_fake_mongo(command, args):
-    password = "no2sqlSmokePw" + secrets.token_hex(12)
+    # Random throwaway credential, generated per run (never a real secret).
+    fake_pw = secrets.token_hex(16)
     # Port 9 (discard) on loopback refuses quickly; short timeouts keep CI fast.
-    conn = (f"mongodb://no2sql_smoke:{password}@127.0.0.1:9/"
+    conn = (f"mongodb://no2sql_smoke:{fake_pw}@127.0.0.1:9/"
             "?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000")
     env = base_env()
     env["NO2SQL_MONGO"] = conn
@@ -248,7 +249,7 @@ def run_with_fake_mongo(command, args):
           f"({'JSON-RPC error' if 'error' in result else 'tool result'})")
     server.shutdown()
     print("run 2 (unreachable MongoDB): clean exit")
-    check_no_leak(server, {"MongoDB password": password, "MongoDB connection string": conn}, "run 2")
+    check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 2")
 
 
 def main():

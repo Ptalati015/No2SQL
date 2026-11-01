@@ -1,0 +1,3 @@
+# False positive: the MCP smoke test generated a random throwaway Mongo password per run
+# (secrets.token_hex), not a real secret. The line was reworded in the next commit.
+d312961b789b298dc8b8fe7e748e5e179870cb50:.github/scripts/mcp_smoke_test.py:generic-api-key:237

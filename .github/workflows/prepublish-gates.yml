@@ -90,6 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           MAIN_PKG="artifacts/pack/No2SQL.1.0.3.nupkg"
+          echo "::group::Primary package layout"; unzip -l "$MAIN_PKG"; echo "::endgroup::"
           unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
           # The folder under tools/ (tfm or "any") varies between SDK feature bands, so match loosely
           unzip -l "$MAIN_PKG" | grep -E "tools/.*/DotnetToolSettings\.xml$"
@@ -100,6 +101,7 @@ jobs:
           for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
             RID_PKG="artifacts/pack/No2SQL.$rid.1.0.3.nupkg"
             test -f "$RID_PKG"
+            echo "::group::$rid package layout"; unzip -l "$RID_PKG"; echo "::endgroup::"
             unzip -l "$RID_PKG" | grep -E "tools/.*/$rid/No2SQL(\.exe)?$"
           done
 

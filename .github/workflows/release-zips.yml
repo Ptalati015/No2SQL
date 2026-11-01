@@ -19,6 +19,12 @@ on:
         description: 'Existing tag to publish (for example v1.1.0). Leave empty for a dry run.'
         required: false
         default: ''
+  # TEMPORARY: dry-run evidence for the PR. Removed before review.
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-zips.yml'
 
 permissions:
   contents: read

@@ -5,7 +5,8 @@ name: Release Zips
 # for a v* tag. Does not push to NuGet and needs no secret besides GITHUB_TOKEN.
 #
 # - Push a v* tag: builds that tag and publishes the release.
-# - workflow_dispatch with a tag: rebuilds that existing tag and (re)uploads the assets.
+# - workflow_dispatch with a tag: rebuilds that existing tag and publishes its release.
+#   If the release already exists, the run fails unless overwrite is checked.
 # - workflow_dispatch without a tag: dry run on the selected ref; the zips are
 #   kept as a workflow artifact and nothing is published.
 
@@ -19,6 +20,11 @@ on:
         description: 'Existing tag to publish (for example v1.1.0). Leave empty for a dry run.'
         required: false
         default: ''
+      overwrite:
+        description: 'Replace the assets of a release that already exists for this tag.'
+        type: boolean
+        required: false
+        default: false
   # TEMPORARY: dry-run evidence for the PR. Removed before review.
   pull_request:
     branches:
@@ -308,12 +314,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          OVERWRITE: ${{ inputs.overwrite }}
         run: |
           set -euo pipefail
           cd dist/zips
           sha256sum -c SHA256SUMS.txt
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            if [[ "$OVERWRITE" != "true" ]]; then
+              echo "A release for $TAG already exists. Re-run with overwrite checked to replace its assets."
+              exit 1
+            fi
             gh release upload "$TAG" No2SQL-*.zip SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
           else
             prerelease=()

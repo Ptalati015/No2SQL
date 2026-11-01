@@ -3,4 +3,10 @@
     <!-- Suppress SharpCompress path traversal advisory (CVE-2026-44788) - no fix available upstream yet -->
     <NuGetAuditSuppress>https://github.com/advisories/GHSA-6c8g-7p36-r338</NuGetAuditSuppress>
   </PropertyGroup>
+
+  <!-- Release builds ship no symbols, for every project, so the published tool packages contain no .pdb files -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
 </Project>

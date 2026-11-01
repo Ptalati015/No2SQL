@@ -91,7 +91,8 @@ jobs:
           set -euo pipefail
           MAIN_PKG="artifacts/pack/No2SQL.1.0.3.nupkg"
           unzip -l "$MAIN_PKG" | grep -F ".mcp/server.json"
-          unzip -l "$MAIN_PKG" | grep -F "tools/net10.0/any/DotnetToolSettings.xml"
+          # The folder under tools/ (tfm or "any") varies between SDK feature bands, so match loosely
+          unzip -l "$MAIN_PKG" | grep -E "tools/.*/DotnetToolSettings\.xml$"
           # Primary package must be a dnx-runnable MCP server package
           unzip -p "$MAIN_PKG" No2SQL.nuspec | grep -F 'packageType name="DotnetTool"'
           unzip -p "$MAIN_PKG" No2SQL.nuspec | grep -F 'packageType name="McpServer"'
@@ -99,7 +100,7 @@ jobs:
           for rid in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
             RID_PKG="artifacts/pack/No2SQL.$rid.1.0.3.nupkg"
             test -f "$RID_PKG"
-            unzip -l "$RID_PKG" | grep -E "tools/any/$rid/No2SQL(\.exe)?$"
+            unzip -l "$RID_PKG" | grep -E "tools/.*/$rid/No2SQL(\.exe)?$"
           done
 
       - name: Upload packed artifacts

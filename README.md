@@ -93,7 +93,7 @@ No2SQL reads these environment variables. Set them in your MCP client's `env` co
 | `NO2SQL_ALLOWED_DATABASES` | Recommended | Comma-separated list of the databases No2SQL may read, for example `sales,inventory`. If it is empty, every database is readable except the system ones. |
 | `NO2SQL_BLOCK_SYSTEM_DATABASES` | No | Defaults to `true`, which blocks `admin`, `config` and `local`. Leave it on. |
 
-Without `NO2SQL_MONGO` the server still starts, but every tool that reads MongoDB returns an error.
+Without `NO2SQL_MONGO` the server starts and lists its tools, but every tool call, including `test_connectivity`, returns an error.
 
 ## Set up your AI client
 
@@ -294,7 +294,7 @@ All tools only read from MongoDB. Each one carries MCP tool annotations that mar
 
 | Tool | What it does |
 |------|-------------|
-| `test_connectivity` | Checks that the server is running. It doesn't contact MongoDB. |
+| `test_connectivity` | Checks that the server is running. It doesn't contact MongoDB, but like every tool it needs `NO2SQL_MONGO` to be set. |
 | `list_databases` | Lists the databases you can analyze, filtered by `NO2SQL_ALLOWED_DATABASES`. |
 | `list_inferred_relationships` | Lists the ID-like fields (such as `userId`) in each collection. |
 | `compare_id_fields_to_ids` | Infers relationships by matching ID-like field values to `_id` values, with a confidence score. |
@@ -307,7 +307,7 @@ All tools only read from MongoDB. Each one carries MCP tool annotations that mar
 
 ## Security guardrails
 
-No2SQL validates every tool input: identifier format and length, `source` values, relationship override fields and prompt-injection marker patterns. Errors sent to the client contain only an error id, and the details go to the server log.
+No2SQL validates every tool input: identifier format and length, `source` values, relationship override fields and prompt-injection marker patterns. Errors sent to the client never include connection details. When a tool fails while running, the client gets an error id and the details go to the server log.
 
 Recommended baseline:
 
@@ -344,7 +344,7 @@ dotnet nuget push **/bin/Release/*.nupkg --api-key <your-api-key> --source https
 
 ---
 
-**Run from source:** `dotnet run --project No2SQL`. When you build from source you can also set the connection string under `ConnectionStrings:MongoDb` in `No2SQL/appsettings.json`, but don't commit real values.
+**Run from source:** run `dotnet run` from the `No2SQL` folder. When you run from source you can also set the connection string under `ConnectionStrings:MongoDb` in `No2SQL/appsettings.json`, but don't commit real values. That file is only read when the working directory is `No2SQL`, so `dotnet run --project No2SQL` from the repo root ignores it.
 
 ---
 

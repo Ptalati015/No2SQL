@@ -6,6 +6,8 @@ using No2SQL.Security;
 using No2SQL.Sql;
 using No2SQL.Sql.Models;
 using No2SQL.Visuals;
+// Every tool is annotated read-only, non-destructive, idempotent and closed-world.
+// If a tool ever writes data, touches files or calls another network service, update its annotations.
 internal class SchemaTools
 {
     private readonly SchemaAnalyzer _analyzer;

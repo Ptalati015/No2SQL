@@ -11,6 +11,7 @@ Easy setup in every AI tool that runs local MCP servers.
 - Per-platform downloads on GitHub Releases for win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64, with `SHA256SUMS.txt`. No .NET needed (#42).
 - MCP tool annotations (title, read-only, non-destructive, idempotent, closed-world) and clearer tool and parameter descriptions (#41).
 - `server.json` marks `NO2SQL_MONGO` as required and secret and documents the guardrail variables (#39).
+- README rewritten with both install paths and copy-paste setup for Claude Desktop, Claude Code, VS Code, Cursor, Windsurf, OpenAI Codex CLI and the OpenAI Agents SDK, plus the MCP Registry `mcp-name` marker (#44).
 - CI smoke test: starts the server over stdio, checks the handshake, all 10 tools and their annotations, and that no environment values leak (#40).
 
 ### Changed

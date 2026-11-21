@@ -46,8 +46,8 @@ No2SQL is a local MCP server. Your AI client starts it on your own machine and t
    # Linux
    sha256sum -c SHA256SUMS.txt --ignore-missing
 
-   # macOS: compare the output with the matching line in SHA256SUMS.txt
-   shasum -a 256 No2SQL-1.1.0-osx-arm64.zip
+   # macOS
+   shasum -a 256 -c SHA256SUMS.txt --ignore-missing
    ```
 
    ```powershell
@@ -55,7 +55,7 @@ No2SQL is a local MCP server. Your AI client starts it on your own machine and t
    (Get-FileHash .\No2SQL-1.1.0-win-x64.zip -Algorithm SHA256).Hash
    ```
 
-   Every release also has a build provenance attestation. If you have the [GitHub CLI](https://cli.github.com/), you can check that the zip was built by this repository's release workflow:
+   Every release also has a build provenance attestation. If you have the [GitHub CLI](https://cli.github.com/), you can check that the zip was built by this repository's release workflow. Sign in with `gh auth login` first:
 
    ```bash
    gh attestation verify No2SQL-1.1.0-<platform>.zip --repo Ptalati015/No2SQL

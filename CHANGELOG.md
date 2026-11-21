@@ -1,0 +1,22 @@
+# Changelog
+
+All notable changes to No2SQL are listed here, newest first.
+
+## 1.1.0 — 2026-11
+
+Easy setup in every AI tool that runs local MCP servers.
+
+### Added
+- Run No2SQL with one command on .NET 10: `dnx No2SQL@1.1.0 --yes`. The NuGet package is now an `McpServer` tool package with self-contained RID packages (#43).
+- Per-platform downloads on GitHub Releases for win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64, with `SHA256SUMS.txt`. No .NET needed (#42).
+- MCP tool annotations (title, read-only, non-destructive, idempotent, closed-world) and clearer tool and parameter descriptions (#41).
+- `server.json` marks `NO2SQL_MONGO` as required and secret and documents the guardrail variables (#39).
+- README rewritten with both install paths and copy-paste setup for Claude Desktop, Claude Code, VS Code, Cursor, Windsurf, OpenAI Codex CLI and the OpenAI Agents SDK, plus the MCP Registry `mcp-name` marker (#44).
+- CI smoke test: starts the server over stdio, checks the handshake, all 10 tools and their annotations, and that no environment values leak (#40).
+
+### Changed
+- `initialize` reports the package version in `serverInfo` instead of `1.0.0.0` (#43).
+- `No2SQL.nuspec` removed; the csproj is the single packaging source (#43).
+
+### Not yet supported
+- ChatGPT, claude.ai web and mobile, and the hosted Claude and OpenAI APIs need a remote (HTTP) mode, planned for a later release.

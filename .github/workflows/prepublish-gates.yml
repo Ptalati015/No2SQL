@@ -36,10 +36,10 @@ jobs:
 
       # Starts the built server over stdio with no MongoDB and checks initialize + tools/list,
       # error handling, clean exit and that no environment values leak into its output.
-      # Add --require-annotations once the MCP-3 tool annotations are merged.
+      # --require-annotations: every tool must carry the MCP-3 annotations.
       - name: MCP stdio smoke test
         timeout-minutes: 2
-        run: python3 .github/scripts/mcp_smoke_test.py --expected-tools 10 -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
+        run: python3 .github/scripts/mcp_smoke_test.py --expected-tools 10 --require-annotations -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
 
       - name: Scan vulnerable packages
         shell: bash

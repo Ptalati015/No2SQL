@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,9 +32,20 @@ builder.Services.AddScoped(sp => new ErdGenerator());
 builder.Services.AddSingleton(sp => new McpGuardrails());
 
 
+// Report the package version (e.g. "1.0.3") in the MCP initialize response instead of the
+// four-part assembly version. Build metadata after '+' (commit hash) is dropped.
+var informationalVersion = typeof(Program).Assembly
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+var serverVersion = string.IsNullOrWhiteSpace(informationalVersion)
+    ? typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"
+    : informationalVersion.Split('+')[0];
+
 // Add the MCP services: the transport to use (stdio) and the tools to register.
 builder.Services
-    .AddMcpServer()
+    .AddMcpServer(options =>
+    {
+        options.ServerInfo = new() { Name = "No2SQL", Version = serverVersion };
+    })
     .WithStdioServerTransport()
     .WithTools<SchemaTools>();
 

@@ -6,12 +6,24 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- MCP server should NOT be a dotnet tool -->
-    <PackAsTool>false</PackAsTool>
+    <!--
+      Packaged as a .NET tool so the .NET 10 SDK can run it directly with
+      `dnx No2SQL@<version>`, which is how MCP clients launch NuGet-hosted servers.
+      With PackAsTool + RuntimeIdentifiers the SDK produces one small primary package
+      (No2SQL, type DotnetTool;McpServer, carrying .mcp/server.json and the RID list) and
+      one self-contained single-file package per RID (No2SQL.<rid>, type DotnetToolRidPackage).
+      dnx picks the RID package for the current machine, so users need the SDK for dnx itself
+      but no separate .NET runtime. The csproj is the only packaging source of truth.
+    -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>No2SQL</ToolCommandName>
+    <PackageType>McpServer</PackageType>
 
-    <!-- Normal NuGet package metadata -->
+    <!-- NuGet package metadata -->
     <PackageId>No2SQL</PackageId>
     <PackageVersion>1.0.3</PackageVersion>
+    <!-- Assembly/file/informational version follow the package version so MCP initialize reports the real number -->
+    <Version>$(PackageVersion)</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
     <Description>No2SQL MCP server that transforms MongoDB schemas into SQL schema scripts and ER diagrams.</Description>
@@ -22,16 +34,27 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
-    <!-- Self-contained multi-RID MCP server -->
+    <!-- Self-contained single-file binaries, one RID package each -->
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>false</PublishTrimmed>
-    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+
+    <!-- Package hygiene: validate packages on pack (symbols are dropped for Release in Directory.Build.props) -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- Deterministic, source-link-friendly builds in CI -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include=".mcp\server.json" Pack="true" PackagePath="/.mcp/" />
     <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="..\NOTICE" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="..\TRADEMARK.md" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

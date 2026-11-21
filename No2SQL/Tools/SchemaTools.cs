@@ -25,8 +25,8 @@ internal class SchemaTools
         _guardrails = guardrails;
     }
 
-    [McpServerTool]
-    [Description("Test MCP server connectivity.")]
+    [McpServerTool(Title = "Test connectivity", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Checks that the No2SQL MCP server is running and answering. Returns a success message; it does not contact MongoDB, so use list_databases to check the database connection.")]
     public Task<string> TestConnectivity()
     {
         try
@@ -39,8 +39,8 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("List all available databases on the MongoDB server.")]
+    [McpServerTool(Title = "List databases", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Lists the MongoDB databases this server can see, filtered by NO2SQL_ALLOWED_DATABASES when it is set. Use it first to find the database name the other tools need.")]
     public async Task<string> ListDatabases()
     {
         try
@@ -68,9 +68,10 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("List ID-like fields in each collection.")]
-    public async Task<string> ListInferredRelationships(string databaseName)
+    [McpServerTool(Title = "List ID-like fields", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Lists, per collection, the fields whose names look like references to another document (for example userId or order_id). Use it for a quick look at likely relationships before checking them with compare_id_fields_to_ids.")]
+    public async Task<string> ListInferredRelationships(
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName)
     {
         try
         {
@@ -94,10 +95,10 @@ internal class SchemaTools
     }
 
 
-    [McpServerTool]
-    [Description("Infer relationships on a MongoDB database.")]
+    [McpServerTool(Title = "Infer relationships", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Infers relationships by matching the values of ID-like fields against the _id values of other collections. Returns each source collection, target collection, field and a confidence percentage; use it to see which foreign keys the SQL schema will get.")]
     public async Task<string> CompareIdFieldsToIds(
-        [Description("Database name")] string databaseName)
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName)
     {
         try
         {
@@ -121,10 +122,10 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("Generate SQL schema for a MongoDB database.")]
+    [McpServerTool(Title = "Generate SQL schema", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates a SQL script (CREATE TABLE, indexes and foreign keys) for a MongoDB database from sampled documents and inferred relationships. Returns the script as text; use generate_sql_schema_advanced to add or correct relationships yourself.")]
     public async Task<string> GenerateSqlSchema(
-        [Description("Database name")] string databaseName)
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName)
     {
         try
         {
@@ -141,9 +142,11 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("Generate SQL schema with optional user-provided relationships.")]
-    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(string databaseName, List<UserRelationshipOverride>? overrides = null)
+    [McpServerTool(Title = "Generate SQL schema (advanced)", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates the SQL schema like generate_sql_schema, but also applies relationships you supply. Returns structured output with tables, foreign keys, indexes, the full script and an error message if generation failed; use it when inferred relationships are missing or wrong.")]
+    public async Task<SqlSchemaOutput> GenerateSqlSchemaAdvanced(
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
+        [Description("Optional relationships to add to the inferred ones. Each item names fromCollection, fromField, toCollection and toField, and replaces any inferred relationship on the same fromCollection and fromField. Leave empty to use inferred relationships only.")] List<UserRelationshipOverride>? overrides = null)
     {
         try
         {
@@ -170,13 +173,11 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description(
-    "Generate SQL INSERT statements for documents in a MongoDB collection. "
-    )]
+    [McpServerTool(Title = "Generate SQL seed data", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates SQL INSERT statements for the documents in one MongoDB collection (up to the first 1000 documents). Returns a list of INSERT chunks; use it after creating the schema to load sample data.")]
     public async Task<List<string>> GenerateSeedersForCollection(
-    [Description("Database name")] string databaseName,
-    [Description("Collection name")] string collectionName)
+    [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
+    [Description("Name of the collection to export as INSERT statements.")] string collectionName)
     {
         try
         {
@@ -203,9 +204,11 @@ internal class SchemaTools
     }
 
 
-    [McpServerTool]
-    [Description("Generate a Mermaid ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdMermaid(string databaseName, string source = "sql")
+    [McpServerTool(Title = "Generate Mermaid ERD", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates an entity-relationship diagram of a MongoDB database. Returns a Mermaid erDiagram you can render in Markdown viewers such as GitHub.")]
+    public async Task<string> GenerateErdMermaid(
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
+        [Description("Where the diagram comes from. Allowed values: sql (default; built from the generated SQL schema, fails if SQL generation fails), auto (tries sql, falls back to mongo), mongo (built straight from the sampled collections).")] string source = "sql")
     {
         try
         {
@@ -252,9 +255,11 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("Generate a PlantUML ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdPlantUml(string databaseName, string source = "sql")
+    [McpServerTool(Title = "Generate PlantUML ERD", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates an entity-relationship diagram of a MongoDB database. Returns PlantUML source you can render with any PlantUML tool.")]
+    public async Task<string> GenerateErdPlantUml(
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
+        [Description("Where the diagram comes from. Allowed values: sql (default; built from the generated SQL schema, fails if SQL generation fails), auto (tries sql, falls back to mongo), mongo (built straight from the sampled collections).")] string source = "sql")
     {
         try
         {
@@ -301,9 +306,11 @@ internal class SchemaTools
         }
     }
 
-    [McpServerTool]
-    [Description("Generate a GraphViz DOT ER diagram. Source can be auto, mongo, or sql.")]
-    public async Task<string> GenerateErdDot(string databaseName, string source = "sql")
+    [McpServerTool(Title = "Generate GraphViz DOT ERD", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
+    [Description("Generates an entity-relationship diagram of a MongoDB database. Returns GraphViz DOT source you can render with dot or any GraphViz viewer.")]
+    public async Task<string> GenerateErdDot(
+        [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
+        [Description("Where the diagram comes from. Allowed values: sql (default; built from the generated SQL schema, fails if SQL generation fails), auto (tries sql, falls back to mongo), mongo (built straight from the sampled collections).")] string source = "sql")
     {
         try
         {

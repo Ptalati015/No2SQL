@@ -2,6 +2,14 @@
 
 All notable changes to No2SQL are listed here, newest first.
 
+## 1.1.1 — 2026-11
+
+Fixes the MCP Registry listing. No change to the server or its tools.
+
+### Changed
+- Server name is now `io.github.Ptalati015/no2sql` in `server.json` and in the README `mcp-name` marker. The MCP Registry matches the `io.github.<GitHub login>` namespace case-sensitively, so the lowercase name from 1.1.0 could not be published.
+- `server.json` uses the 2025-12-11 schema; 2025-10-17 is deprecated by the registry publisher.
+
 ## 1.1.0 — 2026-11
 
 Easy setup in every AI tool that runs local MCP servers.

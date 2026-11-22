@@ -109,6 +109,12 @@ jobs:
             test -f "$RID_PKG"
             echo "::group::$rid package layout"; unzip -l "$RID_PKG"; echo "::endgroup::"
             unzip -l "$RID_PKG" | grep -E "tools/.*/$rid/No2SQL(\.exe)?$"
+            # nuget.org rejects McpServer without DotnetTool, so RID packages must be DotnetToolRidPackage only
+            unzip -p "$RID_PKG" "No2SQL.$rid.nuspec" | grep -F 'packageType name="DotnetToolRidPackage"'
+            if unzip -p "$RID_PKG" "No2SQL.$rid.nuspec" | grep -F 'packageType name="McpServer"'; then
+              echo "::error::$RID_PKG has the McpServer package type; nuget.org will reject it"
+              exit 1
+            fi
           done
 
       - name: Upload packed artifacts

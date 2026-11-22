@@ -17,7 +17,12 @@
     -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>No2SQL</ToolCommandName>
-    <PackageType>McpServer</PackageType>
+    <!--
+      McpServer goes on the primary package only. The SDK packs each RID package with
+      RuntimeIdentifier set, and nuget.org rejects a package that has McpServer without
+      DotnetTool (RID packages are DotnetToolRidPackage), so the condition must stay.
+    -->
+    <PackageType Condition="'$(RuntimeIdentifier)' == ''">McpServer</PackageType>
 
     <!-- NuGet package metadata -->
     <PackageId>No2SQL</PackageId>

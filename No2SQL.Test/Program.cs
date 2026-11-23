@@ -76,6 +76,7 @@ static async Task RunGuardrailsTestAsync()
     TestSourceValidation(guardrails);
     TestOverrideValidation(guardrails);
     TestPromptInjectionDetection(guardrails);
+    TestDatabaseVisibility();
 
     Console.WriteLine("\n=== All tests completed ===");
 }
@@ -123,6 +124,41 @@ static void TestDatabaseNameValidation(McpGuardrails guardrails)
     catch (ArgumentException ex)
     {
         Console.WriteLine($"✓ Oversized database name rejected: {ex.Message}");
+    }
+
+    Console.WriteLine();
+}
+
+static void TestDatabaseVisibility()
+{
+    Console.WriteLine("[TEST] Database Visibility (list_databases)");
+
+    var originalBlock = Environment.GetEnvironmentVariable("NO2SQL_BLOCK_SYSTEM_DATABASES");
+    var originalAllowed = Environment.GetEnvironmentVariable("NO2SQL_ALLOWED_DATABASES");
+    var databases = new[] { "admin", "Config", "LOCAL", "sales", "inventory" };
+
+    try
+    {
+        void Check(string label, string? block, string? allowed, string[] expected)
+        {
+            Environment.SetEnvironmentVariable("NO2SQL_BLOCK_SYSTEM_DATABASES", block);
+            Environment.SetEnvironmentVariable("NO2SQL_ALLOWED_DATABASES", allowed);
+
+            var visible = new McpGuardrails().FilterVisibleDatabases(databases);
+            var passed = visible.SequenceEqual(expected);
+            Console.WriteLine($"{(passed ? "✓" : "✗")} {label}: [{string.Join(", ", visible)}]");
+        }
+
+        Check("Default hides system databases", null, null, new[] { "sales", "inventory" });
+        Check("Block=true hides system databases", "true", null, new[] { "sales", "inventory" });
+        Check("Block=false lists system databases", "false", null, databases);
+        Check("Allow-list applies with block on", null, "sales,admin", new[] { "sales" });
+        Check("Allow-list applies with block off", "false", " SALES , admin ", new[] { "admin", "sales" });
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("NO2SQL_BLOCK_SYSTEM_DATABASES", originalBlock);
+        Environment.SetEnvironmentVariable("NO2SQL_ALLOWED_DATABASES", originalAllowed);
     }
 
     Console.WriteLine();

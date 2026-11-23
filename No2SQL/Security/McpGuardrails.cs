@@ -40,6 +40,16 @@ internal sealed class McpGuardrails
         return normalized;
     }
 
+    // Applies the same system-database block and allow-list as ValidateDatabaseName,
+    // so list_databases only shows names the other tools will accept.
+    public List<string> FilterVisibleDatabases(IEnumerable<string> databaseNames)
+    {
+        return databaseNames
+            .Where(name => !(BlockSystemDatabases && _blockedSystemDatabases.Contains(name)))
+            .Where(name => _allowedDatabases.Count == 0 || _allowedDatabases.Contains(name))
+            .ToList();
+    }
+
     public string ValidateCollectionName(string? collectionName)
     {
         return ValidateIdentifier(collectionName, "collectionName", 128);

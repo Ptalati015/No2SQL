@@ -40,7 +40,7 @@ jobs:
       # Add --require-tool-errors once BL-2 (failing tools return isError: true) merges.
       - name: MCP stdio smoke test
         timeout-minutes: 2
-        run: python3 .github/scripts/mcp_smoke_test.py --expected-tools 10 --require-annotations -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
+        run: python3 -I .github/scripts/mcp_smoke_test.py --expected-tools 10 --require-annotations -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
 
       # server.json must validate against its own $schema, and both READMEs must carry
       # the exact "mcp-name: <server.json name>" marker the MCP Registry checks.
@@ -49,9 +49,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/gate-venv"
+          python3 -I -m venv "$RUNNER_TEMP/gate-venv"
           "$RUNNER_TEMP/gate-venv/bin/pip" install --quiet --disable-pip-version-check jsonschema==4.26.0
-          "$RUNNER_TEMP/gate-venv/bin/python" .github/scripts/check_registry_metadata.py
+          "$RUNNER_TEMP/gate-venv/bin/python" -I .github/scripts/check_registry_metadata.py
 
       - name: Scan vulnerable packages
         shell: bash

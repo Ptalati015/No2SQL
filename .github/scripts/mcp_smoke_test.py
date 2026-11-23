@@ -12,7 +12,9 @@ if (with --require-annotations) a tool lacks the MCP-3 annotations, if the
 server crashes or writes non-MCP text to stdout, or if a canary environment
 value or the fake password shows up in any stdout or stderr output. With
 --require-tool-errors, the MongoDB tool calls that must fail have to come back as
-tool results with `isError: true`, so clients can tell they failed.
+tool results with `isError: true`, so clients can tell they failed, and
+test_connectivity must succeed without MongoDB. Run 3 uses a malformed connection
+string (fails parsing) carrying a secret password, which must not leak either.
 
 Usage:
   mcp_smoke_test.py [--expected-tools N] [--require-annotations] [--require-tool-errors]
@@ -236,6 +238,11 @@ def run_without_mongo(command, args):
     # Error paths must answer, not crash.
     result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
     check_tool_error(server, result, f"tools/call {MONGO_TOOL} without MongoDB", args.require_tool_errors)
+    if args.require_tool_errors:
+        result = server.request("tools/call", {"name": "test_connectivity", "arguments": {}}, allow_error=True)
+        if "error" in result or result.get("result", {}).get("isError"):
+            server.die(f"test_connectivity without MongoDB must succeed, got {json.dumps(result)[:300]}")
+        print("tools/call test_connectivity without MongoDB answered (tool result, isError=False)")
     result = server.request("no2sql/smoke-unknown-method", allow_error=True)
     if "error" not in result:
         server.die("unknown method did not return a JSON-RPC error")
@@ -264,6 +271,23 @@ def run_with_fake_mongo(command, args):
     check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 2")
 
 
+def run_with_malformed_mongo(command, args):
+    fake_pw = secrets.token_hex(16)
+    # Bad scheme: the driver rejects it while parsing (MongoConfigurationException), and
+    # that exception's message can quote the whole connection string, password included.
+    conn = f"mongo://no2sql_smoke:{fake_pw}@127.0.0.1:9/"
+    env = base_env()
+    env["NO2SQL_MONGO"] = conn
+
+    server = StdioServer(command, env, args.timeout)
+    server.handshake()
+    result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
+    check_tool_error(server, result, f"tools/call {MONGO_TOOL} with malformed NO2SQL_MONGO", args.require_tool_errors)
+    server.shutdown()
+    print("run 3 (malformed NO2SQL_MONGO): clean exit")
+    check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 3")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-tools", type=int, default=10)
@@ -279,6 +303,7 @@ def main():
 
     run_without_mongo(command, args)
     run_with_fake_mongo(command, args)
+    run_with_malformed_mongo(command, args)
     print("MCP smoke test passed")
 
 

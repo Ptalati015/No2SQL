@@ -2,6 +2,20 @@
 
 All notable changes to No2SQL are listed here, newest first.
 
+## 1.1.2 — 2026-11 (in progress)
+
+Backlog fixes: No2SQL behaves well when misconfigured, and AI clients can tell when a tool failed.
+
+### Security
+- An unparseable `NO2SQL_MONGO` is no longer written to stderr. In 1.1.1 a malformed connection string, password included, could appear in the server log (#50).
+
+### Changed
+- The server starts and `test_connectivity` works without `NO2SQL_MONGO`. Tools that need MongoDB return one clear message naming `NO2SQL_MONGO` instead of failing at startup (#50).
+- `NO2SQL_MONGO` is the only configuration source. The `ConnectionStrings:MongoDb` fallback is removed, so the undocumented `ConnectionStrings__MongoDb` environment variable and `--ConnectionStrings:MongoDb=` argument are no longer read (#50).
+
+### Added
+- CI gate: `server.json` is validated against its `$schema`, its `io.github.` name must match the GitHub owner's casing, and both READMEs must carry the exact `mcp-name` marker. The smoke test checks that a malformed connection string never leaks its password (#49).
+
 ## 1.1.1 — 2026-11
 
 Fixes the MCP Registry listing. No change to the server or its tools.

@@ -17,16 +17,16 @@ No2SQL is a local MCP server. Your AI client starts it on your own machine and t
 
 ### Option A: download the zip (no .NET needed)
 
-1. Download the zip for your platform from the [v1.1.1 release](https://github.com/Ptalati015/No2SQL/releases/tag/v1.1.1):
+1. Download the zip for your platform from the [v1.1.2 release](https://github.com/Ptalati015/No2SQL/releases/tag/v1.1.2):
 
    | Platform | File |
    |---|---|
-   | Windows x64 | `No2SQL-1.1.1-win-x64.zip` |
-   | Windows ARM64 | `No2SQL-1.1.1-win-arm64.zip` |
-   | macOS Apple silicon | `No2SQL-1.1.1-osx-arm64.zip` |
-   | macOS Intel | `No2SQL-1.1.1-osx-x64.zip` |
-   | Linux x64 | `No2SQL-1.1.1-linux-x64.zip` |
-   | Linux ARM64 | `No2SQL-1.1.1-linux-arm64.zip` |
+   | Windows x64 | `No2SQL-1.1.2-win-x64.zip` |
+   | Windows ARM64 | `No2SQL-1.1.2-win-arm64.zip` |
+   | macOS Apple silicon | `No2SQL-1.1.2-osx-arm64.zip` |
+   | macOS Intel | `No2SQL-1.1.2-osx-x64.zip` |
+   | Linux x64 | `No2SQL-1.1.2-linux-x64.zip` |
+   | Linux ARM64 | `No2SQL-1.1.2-linux-arm64.zip` |
 
    Also download `SHA256SUMS.txt` from the same release.
 
@@ -42,19 +42,19 @@ No2SQL is a local MCP server. Your AI client starts it on your own machine and t
 
    ```powershell
    # Windows: compare the output with the matching line in SHA256SUMS.txt
-   (Get-FileHash .\No2SQL-1.1.1-win-x64.zip -Algorithm SHA256).Hash
+   (Get-FileHash .\No2SQL-1.1.2-win-x64.zip -Algorithm SHA256).Hash
    ```
 
    Every release also has a build provenance attestation. If you have the [GitHub CLI](https://cli.github.com/), you can check that the zip was built by this repository's release workflow. Sign in with `gh auth login` first:
 
    ```bash
-   gh attestation verify No2SQL-1.1.1-<platform>.zip --repo Ptalati015/No2SQL
+   gh attestation verify No2SQL-1.1.2-<platform>.zip --repo Ptalati015/No2SQL
    ```
 
 3. macOS only: the exe is not notarized, so Gatekeeper blocks it the first time. Clear the quarantine flag on the one file you downloaded, before you unzip it:
 
    ```bash
-   xattr -d com.apple.quarantine No2SQL-1.1.1-osx-arm64.zip
+   xattr -d com.apple.quarantine No2SQL-1.1.2-osx-arm64.zip
    ```
 
    If you already unzipped it, run the same command on the exe instead (`xattr -d com.apple.quarantine /path/to/No2SQL`). Don't turn Gatekeeper off.
@@ -68,10 +68,10 @@ Your client config uses the **absolute path** to that file as its `command`, wit
 If you have the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), `dnx` downloads No2SQL from NuGet and runs it, so there is nothing to unzip:
 
 ```bash
-dnx No2SQL@1.1.1 --yes
+dnx No2SQL@1.1.2 --yes
 ```
 
-You don't run this yourself. Your client config uses `dnx` as its `command` and `["No2SQL@1.1.1", "--yes"]` as its `args`. If a client says it can't find `dnx` (Claude Desktop on macOS often starts with a short `PATH`), use the full path from `which dnx` (or `where dnx` on Windows).
+You don't run this yourself. Your client config uses `dnx` as its `command` and `["No2SQL@1.1.2", "--yes"]` as its `args`. If a client says it can't find `dnx` (Claude Desktop on macOS often starts with a short `PATH`), use the full path from `which dnx` (or `where dnx` on Windows).
 
 ## Configure
 
@@ -93,7 +93,7 @@ Each example uses the zip install on macOS or Linux (`/Users/you/tools/no2sql/No
 
 ```json
 "command": "dnx",
-"args": ["No2SQL@1.1.1", "--yes"],
+"args": ["No2SQL@1.1.2", "--yes"],
 ```
 
 ### Claude Desktop
@@ -224,7 +224,7 @@ args = []
 env = { NO2SQL_MONGO = "mongodb+srv://<user>:<password>@<cluster-host>/", NO2SQL_ALLOWED_DATABASES = "mydb" }
 ```
 
-For `dnx`, use `command = "dnx"` and `args = ["No2SQL@1.1.1", "--yes"]`. Start `codex` and run `/mcp` to see the server.
+For `dnx`, use `command = "dnx"` and `args = ["No2SQL@1.1.2", "--yes"]`. Start `codex` and run `/mcp` to see the server.
 
 ### OpenAI Agents SDK (Python)
 

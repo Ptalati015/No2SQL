@@ -152,8 +152,10 @@ static void TestDatabaseVisibility()
         Check("Default hides system databases", null, null, new[] { "sales", "inventory" });
         Check("Block=true hides system databases", "true", null, new[] { "sales", "inventory" });
         Check("Block=false lists system databases", "false", null, databases);
-        Check("Allow-list applies with block on", null, "sales,admin", new[] { "sales" });
-        Check("Allow-list applies with block off", "false", " SALES , admin ", new[] { "admin", "sales" });
+        Check("Block on, allow-list set", "true", "sales", new[] { "sales" });
+        Check("Block off, allow-list set", "false", "inventory", new[] { "inventory" });
+        Check("Block on wins over allow-list naming admin", null, "sales,admin", new[] { "sales" });
+        Check("Block off, allow-list naming admin", "false", " SALES , admin ", new[] { "admin", "sales" });
     }
     finally
     {

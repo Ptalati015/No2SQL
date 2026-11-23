@@ -34,13 +34,6 @@ jobs:
       - name: Build Release
         run: dotnet build No2SQL.sln -c Release --no-restore
 
-      # TEMPORARY (BL-3 evidence): run the guardrail harness and fail on any failed check. Removed before review.
-      - name: TEMP guardrail harness
-        shell: bash
-        run: |
-          set -euo pipefail
-          dotnet run --project ci-temp/guardrails-check/GuardrailsCheck.csproj -c Release
-
       # Starts the built server over stdio with no MongoDB and checks initialize + tools/list,
       # error handling, clean exit and that no environment values leak into its output.
       # --require-annotations: every tool must carry the MCP-3 annotations.

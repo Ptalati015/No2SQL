@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,18 +15,19 @@ var builder = Host.CreateApplicationBuilder(args);
 // Configure all logs to go to stderr (stdout is used for the MCP protocol messages).
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
-// Resolve MongoDB connection string from env var first, then appsettings if it's a real value.
-var envMongoConn = Environment.GetEnvironmentVariable("NO2SQL_MONGO");
-var configMongoConn = builder.Configuration.GetConnectionString("MongoDb");
+// NO2SQL_MONGO is the only source of the MongoDB connection string. It is not parsed here:
+// MongoConnection builds the client on the first tool call that needs it, so the server starts,
+// lists its tools and answers test_connectivity even when the variable is missing or wrong.
+var mongoConn = Environment.GetEnvironmentVariable("NO2SQL_MONGO");
+if (string.IsNullOrWhiteSpace(mongoConn))
+{
+    Console.Error.WriteLine(
+        "[No2SQL] NO2SQL_MONGO is not set. The server is running, but tools that read MongoDB will ask for it.");
+}
 
-var mongoConn = !string.IsNullOrWhiteSpace(envMongoConn)
-    ? envMongoConn
-    : (string.IsNullOrWhiteSpace(configMongoConn) || configMongoConn.Contains("<", StringComparison.Ordinal))
-        ? null
-        : configMongoConn;
-
-builder.Services.AddScoped(sp => new SchemaAnalyzer(mongoConn));
-builder.Services.AddScoped(sp => new ScriptGenerator(mongoConn));
+builder.Services.AddSingleton(new MongoConnection(mongoConn));
+builder.Services.AddScoped(sp => new SchemaAnalyzer(sp.GetRequiredService<MongoConnection>()));
+builder.Services.AddScoped(sp => new ScriptGenerator(sp.GetRequiredService<MongoConnection>()));
 builder.Services.AddScoped(sp => new ErdGenerator());
 builder.Services.AddSingleton(sp => new McpGuardrails());
 

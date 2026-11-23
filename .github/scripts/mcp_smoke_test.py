@@ -10,10 +10,13 @@ secret password and calls the same tool.
 The test fails if the handshake fails, if fewer tools than expected are listed,
 if (with --require-annotations) a tool lacks the MCP-3 annotations, if the
 server crashes or writes non-MCP text to stdout, or if a canary environment
-value or the fake password shows up in any stdout or stderr output.
+value or the fake password shows up in any stdout or stderr output. With
+--require-tool-errors, the MongoDB tool calls that must fail have to come back as
+tool results with `isError: true`, so clients can tell they failed.
 
 Usage:
-  mcp_smoke_test.py [--expected-tools N] [--require-annotations] -- <server command...>
+  mcp_smoke_test.py [--expected-tools N] [--require-annotations] [--require-tool-errors]
+                    -- <server command...>
 """
 
 import argparse
@@ -191,6 +194,17 @@ def check_tools(tools, expected_tools, require_annotations):
         print("annotations OK")
 
 
+def check_tool_error(server, result, label, require_tool_errors):
+    """A call that must fail: report how it answered, and enforce isError when asked."""
+    if "error" in result:
+        kind = "JSON-RPC error"
+    else:
+        kind = "tool result, isError=" + str(bool(result.get("result", {}).get("isError")))
+    print(f"{label} answered ({kind})")
+    if require_tool_errors and not result.get("result", {}).get("isError"):
+        server.die(f"{label}: expected a tool result with isError: true, got {kind}")
+
+
 def base_env():
     env = dict(os.environ)
     # The server must not pick up a developer's or runner's real database.
@@ -221,8 +235,7 @@ def run_without_mongo(command, args):
 
     # Error paths must answer, not crash.
     result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
-    print(f"tools/call {MONGO_TOOL} without MongoDB answered "
-          f"({'JSON-RPC error' if 'error' in result else 'tool result'})")
+    check_tool_error(server, result, f"tools/call {MONGO_TOOL} without MongoDB", args.require_tool_errors)
     result = server.request("no2sql/smoke-unknown-method", allow_error=True)
     if "error" not in result:
         server.die("unknown method did not return a JSON-RPC error")
@@ -245,8 +258,7 @@ def run_with_fake_mongo(command, args):
     server = StdioServer(command, env, args.timeout)
     server.handshake()
     result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
-    print(f"tools/call {MONGO_TOOL} with unreachable MongoDB answered "
-          f"({'JSON-RPC error' if 'error' in result else 'tool result'})")
+    check_tool_error(server, result, f"tools/call {MONGO_TOOL} with unreachable MongoDB", args.require_tool_errors)
     server.shutdown()
     print("run 2 (unreachable MongoDB): clean exit")
     check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 2")
@@ -256,6 +268,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-tools", type=int, default=10)
     parser.add_argument("--require-annotations", action="store_true")
+    parser.add_argument("--require-tool-errors", action="store_true",
+                        help="failing MongoDB tool calls must return isError: true")
     parser.add_argument("--timeout", type=float, default=45, help="seconds to wait for each response")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()

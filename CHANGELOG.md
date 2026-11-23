@@ -2,7 +2,7 @@
 
 All notable changes to No2SQL are listed here, newest first.
 
-## 1.1.2 — 2026-11 (in progress)
+## 1.1.2 — 2026-11
 
 Backlog fixes: No2SQL behaves well when misconfigured, and AI clients can tell when a tool failed.
 
@@ -16,7 +16,7 @@ Backlog fixes: No2SQL behaves well when misconfigured, and AI clients can tell w
 - **Behaviour change:** `NO2SQL_MONGO` is the only configuration source. The `ConnectionStrings:MongoDb` fallback is removed, so the undocumented `ConnectionStrings__MongoDb` environment variable and `--ConnectionStrings:MongoDb=` argument are no longer read (#50).
 
 ### Added
-- CI gate: `server.json` is validated against its `$schema`, its `io.github.` name must match the GitHub owner's casing, and both READMEs must carry the exact `mcp-name` marker. The smoke test checks that a malformed connection string never leaks its password and that failing tools return `isError: true` (#49, #51, #52).
+- CI gate: `server.json` is validated against its `$schema`, its `io.github.` name must match the GitHub owner's casing, and both READMEs must carry the exact `mcp-name` marker. The smoke test checks that a malformed connection string never leaks its password and that failing tools return `isError: true` (#49, #51, #52). Its Python dependencies are pinned by hash (#53).
 
 ## 1.1.1 — 2026-11
 

@@ -7,7 +7,7 @@ All notable changes to No2SQL are listed here, newest first.
 Backlog fixes: No2SQL behaves well when misconfigured, and AI clients can tell when a tool failed.
 
 ### Security
-- Fixed a credential leak: in every release before 1.1.2 an unparseable `NO2SQL_MONGO` was written to stderr in full, password included. If you ever saw a connection-string error from No2SQL 1.1.1 or earlier, treat your MCP client's server log as containing that credential, delete the log, and rotate the password (#50).
+- Fixed a credential leak: in every release before 1.1.2, a `NO2SQL_MONGO` value the MongoDB driver could not recognise as a connection string at all (for example, missing the `://` after the scheme) was written to stderr in full, password included. If you ever saw a connection-string error from No2SQL 1.1.1 or earlier, treat your MCP client's server log as containing that credential, delete the log, and rotate the password (#50).
 
 ### Changed
 - **Behaviour change:** tool failures are now reported as MCP tool errors (`isError: true`) instead of normal results, so AI clients can tell a call failed. The message text is unchanged: an error id and a short reason (#52).

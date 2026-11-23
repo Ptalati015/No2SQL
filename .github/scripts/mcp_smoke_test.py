@@ -271,21 +271,30 @@ def run_with_fake_mongo(command, args):
     check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 2")
 
 
-def run_with_malformed_mongo(command, args):
-    fake_pw = secrets.token_hex(16)
-    # Bad scheme: the driver rejects it while parsing (MongoConfigurationException), and
-    # that exception's message can quote the whole connection string, password included.
-    conn = f"mongo://no2sql_smoke:{fake_pw}@127.0.0.1:9/"
-    env = base_env()
-    env["NO2SQL_MONGO"] = conn
+# Strings the driver rejects while parsing (MongoConfigurationException). That exception's
+# message can quote the whole connection string, password included.
+MALFORMED_MONGO_VARIANTS = [
+    ("bad scheme", "mongo://no2sql_smoke:{pw}@127.0.0.1:9/"),
+    ("invalid option value", "mongodb://no2sql_smoke:{pw}@127.0.0.1:9/?connectTimeoutMS=notanumber"),
+]
 
-    server = StdioServer(command, env, args.timeout)
-    server.handshake()
-    result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
-    check_tool_error(server, result, f"tools/call {MONGO_TOOL} with malformed NO2SQL_MONGO", args.require_tool_errors)
-    server.shutdown()
-    print("run 3 (malformed NO2SQL_MONGO): clean exit")
-    check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn}, "run 3")
+
+def run_with_malformed_mongo(command, args):
+    for label, template in MALFORMED_MONGO_VARIANTS:
+        fake_pw = secrets.token_hex(16)
+        conn = template.format(pw=fake_pw)
+        env = base_env()
+        env["NO2SQL_MONGO"] = conn
+
+        server = StdioServer(command, env, args.timeout)
+        server.handshake()
+        result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
+        check_tool_error(server, result, f"tools/call {MONGO_TOOL} with malformed NO2SQL_MONGO ({label})",
+                         args.require_tool_errors)
+        server.shutdown()
+        print(f"run 3 (malformed NO2SQL_MONGO, {label}): clean exit")
+        check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn},
+                      f"run 3 ({label})")
 
 
 def main():

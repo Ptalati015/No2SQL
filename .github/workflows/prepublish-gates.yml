@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -I -m venv "$RUNNER_TEMP/gate-venv"
-          "$RUNNER_TEMP/gate-venv/bin/pip" install --quiet --disable-pip-version-check jsonschema==4.26.0
+          "$RUNNER_TEMP/gate-venv/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r .github/scripts/gate-requirements.txt
           "$RUNNER_TEMP/gate-venv/bin/python" -I .github/scripts/check_registry_metadata.py
 
       - name: Scan vulnerable packages

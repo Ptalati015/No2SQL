@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
+using MongoDB.Driver;
 using No2SQL.Core;
 using No2SQL.Core.Models;
 using No2SQL.Security;
@@ -10,17 +12,25 @@ using No2SQL.Visuals;
 // If a tool ever writes data, touches files or calls another network service, update its annotations.
 internal class SchemaTools
 {
+    // Returned by every tool that reads MongoDB when NO2SQL_MONGO is not set. Fixed text, no values.
+    private const string MongoNotConfiguredMessage =
+        "NO2SQL_MONGO is not set. Set the NO2SQL_MONGO environment variable to your MongoDB connection string " +
+        "in this server's MCP client configuration, then restart the server.";
+
+    private readonly MongoConnection _mongo;
     private readonly SchemaAnalyzer _analyzer;
     private readonly ScriptGenerator _scriptGenerator;
     private readonly ErdGenerator _erdGenerator;
     private readonly McpGuardrails _guardrails;
 
     public SchemaTools(
+        MongoConnection mongo,
         SchemaAnalyzer schemaAnalyzer,
         ScriptGenerator scriptGenerator,
         ErdGenerator erdGenerator,
         McpGuardrails guardrails)
     {
+        _mongo = mongo;
         _analyzer = schemaAnalyzer;
         _scriptGenerator = scriptGenerator;
         _erdGenerator = erdGenerator;
@@ -47,6 +57,8 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
+
             var databases = await _analyzer.ListDatabasesAsync();
             var visibleDatabases = _guardrails.FilterVisibleDatabases(databases);
 
@@ -67,6 +79,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
 
             var res = await _analyzer.GetFieldRelationshipsAsync(databaseName);
@@ -94,6 +107,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
 
             var res = await _analyzer.GetRelationshipsAsync(databaseName);
@@ -121,6 +135,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
 
             var collections = await _analyzer.AnalyzeCollectionsAsync(databaseName);
@@ -142,6 +157,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
             overrides = _guardrails.ValidateOverrides(overrides);
 
@@ -173,6 +189,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
             collectionName = _guardrails.ValidateCollectionName(collectionName);
 
@@ -191,6 +208,15 @@ internal class SchemaTools
                 "generating SQL seeders",
                 ex,
                 $"{SanitizeLabel(databaseName)}.{SanitizeLabel(collectionName)}");
+
+            // This tool reports failure by throwing, and the MCP SDK only passes the message of an
+            // McpException on to the client. A connection setup problem has to reach the user, so it
+            // uses McpException; every other failure keeps the SDK's generic text, as before.
+            if (ex is MongoConnectionSetupException)
+            {
+                throw new McpException(message);
+            }
+
             throw new InvalidOperationException(message);
         }
     }
@@ -204,6 +230,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
             source = _guardrails.ValidateSource(source);
 
@@ -255,6 +282,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
             source = _guardrails.ValidateSource(source);
 
@@ -306,6 +334,7 @@ internal class SchemaTools
     {
         try
         {
+            RequireMongo();
             databaseName = _guardrails.ValidateDatabaseName(databaseName);
             source = _guardrails.ValidateSource(source);
 
@@ -349,15 +378,52 @@ internal class SchemaTools
         }
     }
 
+    // Builds the MongoDB client on first use. Called before a tool validates its arguments or
+    // touches MongoDB, so a missing or invalid NO2SQL_MONGO always gives the same answer.
+    private void RequireMongo() => _ = _mongo.Client;
+
     private static string HandleToolError(string operation, Exception ex, string? subject = null)
     {
+        if (ex is MongoConnectionSetupException { Problem: MongoConnectionProblem.NotConfigured })
+        {
+            Console.Error.WriteLine($"[MCP] {operation} not run: NO2SQL_MONGO is not set.");
+            return MongoNotConfiguredMessage;
+        }
+
         var errorId = Guid.NewGuid().ToString("N")[..8];
+
+        if (ex is MongoConnectionSetupException invalid)
+        {
+            // Type and error id only. The driver's own message can quote the connection string.
+            Console.Error.WriteLine(
+                $"[MCP:{errorId}] {operation} not run: NO2SQL_MONGO is not a valid MongoDB connection string ({invalid.CauseType}).");
+
+            return "NO2SQL_MONGO is not a valid MongoDB connection string. Correct it in this server's MCP client " +
+                $"configuration, then restart the server. See server logs with error id {errorId}.";
+        }
+
         var subjectSuffix = string.IsNullOrWhiteSpace(subject) ? string.Empty : $" for '{SanitizeLabel(subject)}'";
 
+        // A MongoConfigurationException message can quote the connection string, so only its type is logged.
+        var detail = HasMongoConfigurationException(ex) ? "(message withheld)" : ex.Message;
+
         Console.Error.WriteLine(
-            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {ex.GetType().Name}: {ex.Message}");
+            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {ex.GetType().Name}: {detail}");
 
         return $"Unable to complete {operation}{subjectSuffix}. See server logs with error id {errorId}.";
+    }
+
+    private static bool HasMongoConfigurationException(Exception ex)
+    {
+        for (Exception? current = ex; current != null; current = current.InnerException)
+        {
+            if (current is MongoConfigurationException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string SanitizeLabel(string input)

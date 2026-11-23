@@ -8,14 +8,21 @@ namespace No2SQL.Core;
 
 public partial class SchemaAnalyzer
 {
-    private readonly MongoClient _client;
+    private readonly MongoConnection _connection;
+
     public SchemaAnalyzer(string? connectionString)
+        : this(new MongoConnection(connectionString))
     {
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
-        }
-        _client = new MongoClient(connectionString);
+    }
+
+    /// <summary>
+    /// Creates an analyzer over a shared connection. The MongoDB client is built on first use, so
+    /// a missing or invalid connection string surfaces as <see cref="MongoConnectionSetupException"/>
+    /// from the first method that reads MongoDB, not from this constructor.
+    /// </summary>
+    public SchemaAnalyzer(MongoConnection connection)
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
     /// <summary>
     /// Analyzes the specified database and returns a schema summary.
@@ -24,10 +31,12 @@ public partial class SchemaAnalyzer
     /// <returns>A dictionary mapping collection names to field metadata</returns>
     public async Task<Dictionary<string, List<string>>> AnalyzeAsync(string databaseName)
     {
+        // Outside the try: a setup problem must not be wrapped or logged with a stack trace.
+        var client = _connection.Client;
         try
         {
             var result = new Dictionary<string, List<string>>();
-            var db = _client.GetDatabase(databaseName);
+            var db = client.GetDatabase(databaseName);
             // Get all collections in the database
             var collections = await db.ListCollectionNamesAsync();
             var collectionNames = await collections.ToListAsync();
@@ -73,9 +82,11 @@ public partial class SchemaAnalyzer
     /// <returns>A list of database names</returns>
     public async Task<List<string>> ListDatabasesAsync()
     {
+        // Outside the try: a setup problem must not be wrapped or logged with a stack trace.
+        var client = _connection.Client;
         try
         {
-            var databases = await _client.ListDatabaseNamesAsync();
+            var databases = await client.ListDatabaseNamesAsync();
             return await databases.ToListAsync();
         }
         catch (Exception ex)
@@ -88,7 +99,7 @@ public partial class SchemaAnalyzer
 
     public async Task<Dictionary<string, SampledCollection>> SampleCollectionsAsync(string databaseName)
     {
-        var db = _client.GetDatabase(databaseName);
+        var db = _connection.Client.GetDatabase(databaseName);
 
         var collections = await db.ListCollectionNamesAsync();
         var collectionNames = await collections.ToListAsync();

@@ -344,7 +344,7 @@ dotnet nuget push **/bin/Release/*.nupkg --api-key <your-api-key> --source https
 
 ---
 
-**Run from source:** run `dotnet run` from the `No2SQL` folder. When you run from source you can also set the connection string under `ConnectionStrings:MongoDb` in `No2SQL/appsettings.json`, but don't commit real values. That file is only read when the working directory is `No2SQL`, so `dotnet run --project No2SQL` from the repo root ignores it.
+**Run from source:** run `dotnet run` from the `No2SQL` folder, or `dotnet run --project No2SQL` from the repo root. Set `NO2SQL_MONGO` in your environment first; it is the only place the connection string is read from.
 
 ---
 

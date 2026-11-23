@@ -52,7 +52,7 @@ internal class SchemaTools
     }
 
     [McpServerTool(Title = "List databases", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Lists the MongoDB databases this server can see, filtered by NO2SQL_ALLOWED_DATABASES when it is set. Use it first to find the database name the other tools need.")]
+    [Description("Lists the MongoDB databases this server can see, filtered by NO2SQL_ALLOWED_DATABASES when it is set and without the system databases admin, config and local unless NO2SQL_BLOCK_SYSTEM_DATABASES is false. Use it first to find the database name the other tools need.")]
     public async Task<string> ListDatabases()
     {
         try
@@ -60,17 +60,7 @@ internal class SchemaTools
             RequireMongo();
 
             var databases = await _analyzer.ListDatabasesAsync();
-
-            var visibleDatabases = databases;
-            var allowedEnv = Environment.GetEnvironmentVariable("NO2SQL_ALLOWED_DATABASES");
-            if (!string.IsNullOrWhiteSpace(allowedEnv))
-            {
-                var allowed = allowedEnv
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                visibleDatabases = databases.Where(db => allowed.Contains(db)).ToList();
-            }
+            var visibleDatabases = _guardrails.FilterVisibleDatabases(databases);
 
             var output = $"Available databases ({visibleDatabases.Count}):\n" +
                 string.Join("\n", visibleDatabases.Select(db => $"- {db}"));

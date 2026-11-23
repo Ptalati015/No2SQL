@@ -1,5 +1,6 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
+using No2SQL.Core;
 using No2SQL.Core.Models;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
@@ -14,7 +15,7 @@ namespace No2SQL.Sql;
 
 public class ScriptGenerator
 {
-    private readonly MongoClient _client;
+    private readonly MongoConnection _connection;
     private static readonly IFormatProvider Invariant = CultureInfo.InvariantCulture;
     private static readonly JsonWriterSettings CompactJsonSettings = new()
     {
@@ -23,12 +24,18 @@ public class ScriptGenerator
     };
 
     public ScriptGenerator(string? connectionString)
+        : this(new MongoConnection(connectionString))
     {
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new ArgumentNullException(nameof(connectionString), "Connection string cannot be null or empty.");
-        }
-        _client = new MongoClient(connectionString);
+    }
+
+    /// <summary>
+    /// Creates a generator over a shared connection. The MongoDB client is built on first use, so
+    /// a missing or invalid connection string surfaces as <see cref="MongoConnectionSetupException"/>
+    /// from the methods that read MongoDB, not from this constructor.
+    /// </summary>
+    public ScriptGenerator(MongoConnection connection)
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     }
 
     public SqlSchemaOutput GenerateSqlFromInference(List<CollectionSchema> collections, List<Relationship> relationships)
@@ -138,7 +145,7 @@ public class ScriptGenerator
             throw new ArgumentOutOfRangeException(nameof(rowsPerChunk), "Rows per chunk must be greater than zero.");
         }
 
-        var db = _client.GetDatabase(databaseName);
+        var db = _connection.Client.GetDatabase(databaseName);
         var collection = db.GetCollection<BsonDocument>(collectionName);
         var filter = new BsonDocument();
 

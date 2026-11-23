@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Configuration;
 using No2SQL.Core;
 using No2SQL.Security;
 using No2SQL.Sql;
@@ -39,7 +38,7 @@ string? connectionString = await ResolveConnectionStringAsync();
 
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    Console.Error.WriteLine("Missing MongoDB connection string. Set NO2SQL_MONGO or No2SQL/appsettings.json:ConnectionStrings:MongoDb");
+    Console.Error.WriteLine("Missing MongoDB connection string. Set NO2SQL_MONGO.");
     return;
 }
 
@@ -283,7 +282,7 @@ static async Task RunStreamSeederValidationAsync(string[] args)
     string? connStr = await ResolveConnectionStringAsync();
     if (string.IsNullOrWhiteSpace(connStr))
     {
-        Console.Error.WriteLine("Missing MongoDB connection string. Set NO2SQL_MONGO or No2SQL/appsettings.json:ConnectionStrings:MongoDb");
+        Console.Error.WriteLine("Missing MongoDB connection string. Set NO2SQL_MONGO.");
         return;
     }
 
@@ -386,24 +385,9 @@ static int ResolveIntArgOrEnv(string[] args, int index, string envVarName, int d
     return int.TryParse(envValue, out var envParsed) ? envParsed : defaultValue;
 }
 
-static async Task<string?> ResolveConnectionStringAsync()
+// NO2SQL_MONGO is the only source of the connection string, as in the server itself.
+static Task<string?> ResolveConnectionStringAsync()
 {
     var envMongoConn = Environment.GetEnvironmentVariable("NO2SQL_MONGO");
-    if (!string.IsNullOrWhiteSpace(envMongoConn))
-    {
-        return envMongoConn;
-    }
-
-    var config = new ConfigurationBuilder()
-        .SetBasePath(Directory.GetCurrentDirectory())
-        .AddJsonFile("appsettings.json", optional: true)
-        .Build();
-
-    var configConn = config.GetConnectionString("MongoDb");
-    if (!string.IsNullOrWhiteSpace(configConn) && !configConn.Contains("<", StringComparison.Ordinal))
-    {
-        return configConn;
-    }
-
-    return null;
+    return Task.FromResult(string.IsNullOrWhiteSpace(envMongoConn) ? null : envMongoConn);
 }

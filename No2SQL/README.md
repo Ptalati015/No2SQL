@@ -81,9 +81,9 @@ No2SQL reads these environment variables. Set them in your MCP client's `env` co
 |---|---|---|
 | `NO2SQL_MONGO` | Yes | MongoDB connection string, for example `mongodb+srv://<user>:<password>@<cluster-host>/`. It contains credentials, so treat it as a secret. |
 | `NO2SQL_ALLOWED_DATABASES` | Recommended | Comma-separated list of the databases No2SQL may read, for example `sales,inventory`. If it is empty, every database is readable except the system ones. |
-| `NO2SQL_BLOCK_SYSTEM_DATABASES` | No | Defaults to `true`, which blocks `admin`, `config` and `local`. Leave it on. |
+| `NO2SQL_BLOCK_SYSTEM_DATABASES` | No | Defaults to `true`, which blocks `admin`, `config` and `local` and hides them from `list_databases`, even if they are in `NO2SQL_ALLOWED_DATABASES`. Leave it on. |
 
-Without `NO2SQL_MONGO` the server starts and lists its tools, but every tool call, including `test_connectivity`, returns an error.
+Without `NO2SQL_MONGO` the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that `NO2SQL_MONGO` is not set, and if the value isn't a valid MongoDB connection string, the error says that instead. Fix it in your client's `env` config and restart the server.
 
 ## Set up your AI client
 
@@ -278,18 +278,20 @@ Generate a Mermaid ERD for mydb.
 Generate SQL INSERT statements for the orders collection in mydb.
 ```
 
+If a tool answers that `NO2SQL_MONGO` is not set, add it to the `env` block of your client config and restart the client. `test_connectivity` works without it, so it only shows that the server is running.
+
 ## MCP tools
 
 All tools only read from MongoDB. Each one carries MCP tool annotations that mark it read-only, non-destructive and idempotent, so clients can tell it is safe to run.
 
 | Tool | What it does |
 |------|-------------|
-| `test_connectivity` | Checks that the server is running. It doesn't contact MongoDB, but like every tool it needs `NO2SQL_MONGO` to be set. |
-| `list_databases` | Lists the databases you can analyze, filtered by `NO2SQL_ALLOWED_DATABASES`. |
+| `test_connectivity` | Checks that the server is running. It doesn't contact MongoDB and works even when `NO2SQL_MONGO` is not set. |
+| `list_databases` | Lists the databases you can analyze: only those in `NO2SQL_ALLOWED_DATABASES` when it is set, and never `admin`, `config` or `local` unless `NO2SQL_BLOCK_SYSTEM_DATABASES` is `false`. |
 | `list_inferred_relationships` | Lists the ID-like fields (such as `userId`) in each collection. |
 | `compare_id_fields_to_ids` | Infers relationships by matching ID-like field values to `_id` values, with a confidence score. |
 | `generate_sql_schema` | Generates a SQL script with CREATE TABLE statements, indexes and foreign keys. |
-| `generate_sql_schema_advanced` | Same as above, plus relationships you supply yourself, returned as structured output. |
+| `generate_sql_schema_advanced` | Same as above, plus relationships you supply yourself, returned as JSON with tables, foreign keys, indexes and the full script. |
 | `generate_seeders_for_collection` | Generates SQL INSERT statements for up to 1000 documents of one collection. |
 | `generate_erd_mermaid` | Generates a Mermaid ER diagram (`source`: `sql`, `auto` or `mongo`). |
 | `generate_erd_plant_uml` | Generates a PlantUML ER diagram (`source`: `sql`, `auto` or `mongo`). |
@@ -297,7 +299,9 @@ All tools only read from MongoDB. Each one carries MCP tool annotations that mar
 
 ## Security guardrails
 
-No2SQL validates every tool input: identifier format and length, `source` values, relationship override fields and prompt-injection marker patterns. Errors sent to the client never include connection details. When a tool fails while running, the client gets an error id and the details go to the server log.
+No2SQL validates every tool input: identifier format and length, `source` values, relationship override fields and prompt-injection marker patterns.
+
+A failed tool call comes back as an MCP error (`isError: true`), so your client can tell a failure from a result. Error text never includes the connection string or a stack trace. A missing or invalid `NO2SQL_MONGO` gets a fixed message naming the variable, and any other failure gets a short reason with an error id, while the details go to the server log.
 
 Recommended baseline:
 

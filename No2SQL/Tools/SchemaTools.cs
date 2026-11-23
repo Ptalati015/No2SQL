@@ -41,7 +41,7 @@ internal class SchemaTools
     }
 
     [McpServerTool(Title = "Test connectivity", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Checks that the No2SQL MCP server is running and answering. Returns a success message; it does not contact MongoDB, so use list_databases to check the database connection.")]
+    [Description("Checks that the No2SQL MCP server is running and answering. Returns a success message; it does not contact MongoDB and works even when NO2SQL_MONGO is not set, so use list_databases to check the database connection.")]
     public Task<CallToolResult> TestConnectivity()
     {
         try
@@ -153,7 +153,7 @@ internal class SchemaTools
     }
 
     [McpServerTool(Title = "Generate SQL schema (advanced)", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Generates the SQL schema like generate_sql_schema, but also applies relationships you supply. Returns structured output with tables, foreign keys, indexes and the full script; use it when inferred relationships are missing or wrong.")]
+    [Description("Generates the SQL schema like generate_sql_schema, but also applies relationships you supply. Returns a JSON object with tables, foreign keys, indexes and the full script; use it when inferred relationships are missing or wrong.")]
     public async Task<CallToolResult> GenerateSqlSchemaAdvanced(
         [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
         [Description("Optional relationships to add to the inferred ones. Each item names fromCollection, fromField, toCollection and toField, and replaces any inferred relationship on the same fromCollection and fromField. Leave empty to use inferred relationships only.")] List<UserRelationshipOverride>? overrides = null)
@@ -180,7 +180,7 @@ internal class SchemaTools
     }
 
     [McpServerTool(Title = "Generate SQL seed data", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Generates SQL INSERT statements for the documents in one MongoDB collection (up to the first 1000 documents). Returns a list of INSERT chunks; use it after creating the schema to load sample data.")]
+    [Description("Generates SQL INSERT statements for the documents in one MongoDB collection (up to the first 1000 documents). Returns a JSON array of INSERT chunks (empty if the collection has no documents); use it after creating the schema to load sample data.")]
     public async Task<CallToolResult> GenerateSeedersForCollection(
     [Description("Name of the MongoDB database to analyze. Use list_databases to see the names you can use.")] string databaseName,
     [Description("Name of the collection to export as INSERT statements.")] string collectionName)

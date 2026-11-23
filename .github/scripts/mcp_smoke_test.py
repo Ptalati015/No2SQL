@@ -211,7 +211,6 @@ def base_env():
     env = dict(os.environ)
     # The server must not pick up a developer's or runner's real database.
     env.pop("NO2SQL_MONGO", None)
-    env.pop("ConnectionStrings__MongoDb", None)
     return env
 
 
@@ -272,10 +271,13 @@ def run_with_fake_mongo(command, args):
 
 
 # Strings the driver rejects while parsing (MongoConfigurationException). That exception's
-# message can quote the whole connection string, password included.
+# message can quote the whole connection string, password included. The last two leaked the
+# password to stderr in 1.1.1 (fixed by BL-1); keep them as the regression guard.
 MALFORMED_MONGO_VARIANTS = [
     ("bad scheme", "mongo://no2sql_smoke:{pw}@127.0.0.1:9/"),
     ("invalid option value", "mongodb://no2sql_smoke:{pw}@127.0.0.1:9/?connectTimeoutMS=notanumber"),
+    ("missing colon after scheme", "mongodb//no2sql_smoke:{pw}@127.0.0.1:9/"),
+    ("bare value, not a URI", "{pw}"),
 ]
 
 

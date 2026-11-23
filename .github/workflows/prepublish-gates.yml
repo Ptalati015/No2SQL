@@ -39,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet run --project No2SQL.Test/No2SQL.Test.csproj -c Release --no-build -- --test-guardrails | tee guardrails.txt
+          dotnet run --project No2SQL.Test/No2SQL.Test.csproj -c Release -- --test-guardrails | tee guardrails.txt
           grep -q "All tests completed" guardrails.txt
           if grep -q "✗" guardrails.txt; then echo "Guardrail harness reported a failure"; exit 1; fi
 

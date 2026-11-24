@@ -38,9 +38,10 @@ jobs:
       # error handling, clean exit and that no environment values leak into its output.
       # --require-annotations: every tool must carry the MCP-3 annotations.
       # --require-tool-errors: failing MongoDB tool calls must return isError: true (BL-2).
+      # --require-discover: repeat the checks on the server/discover (2026-07-28) path that current clients use.
       - name: MCP stdio smoke test
         timeout-minutes: 2
-        run: python3 -I .github/scripts/mcp_smoke_test.py --expected-tools 10 --require-annotations --require-tool-errors -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
+        run: python3 -I .github/scripts/mcp_smoke_test.py --expected-tools 10 --require-annotations --require-tool-errors --require-discover -- dotnet run --project No2SQL/No2SQL.csproj -c Release --no-build
 
       # server.json must validate against its own $schema, and both READMEs must carry
       # the exact "mcp-name: <server.json name>" marker the MCP Registry checks.

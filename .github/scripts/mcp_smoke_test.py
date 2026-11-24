@@ -32,6 +32,9 @@ import threading
 import time
 
 PROTOCOL_VERSION = "2025-06-18"
+# Clients on this revision skip initialize: server/discover first, then _meta on every request.
+DISCOVER_PROTOCOL_VERSION = "2026-07-28"
+CLIENT_INFO = {"name": "no2sql-ci-smoke", "version": "1.0"}
 
 # Annotation values every No2SQL tool must declare (spec MCP-3).
 REQUIRED_ANNOTATIONS = {
@@ -68,6 +71,7 @@ class StdioServer:
         self.stdout_lines = []
         self.stderr_lines = []
         self.next_id = 1
+        self.meta = None  # set by discover(); then sent as params._meta on every request
         self._stdout_done = threading.Thread(target=self._pump_stdout, daemon=True)
         self._stderr_done = threading.Thread(target=self._pump_stderr, daemon=True)
         self._stdout_done.start()
@@ -107,6 +111,8 @@ class StdioServer:
         request_id = self.next_id
         self.next_id += 1
         message = {"jsonrpc": "2.0", "id": request_id, "method": method}
+        if self.meta is not None:
+            params = dict(params or {}, _meta=self.meta)
         if params is not None:
             message["params"] = params
         self.send(message)
@@ -142,10 +148,22 @@ class StdioServer:
         init = self.request("initialize", {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "no2sql-ci-smoke", "version": "1.0"},
+            "clientInfo": CLIENT_INFO,
         })["result"]
         self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         return init
+
+    def discover(self):
+        """Talk like a 2026-07-28 client: server/discover, no initialize, _meta on every request."""
+        self.meta = {
+            "io.modelcontextprotocol/protocolVersion": DISCOVER_PROTOCOL_VERSION,
+            "io.modelcontextprotocol/clientInfo": CLIENT_INFO,
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }
+        result = self.request("server/discover")["result"]
+        if DISCOVER_PROTOCOL_VERSION not in result.get("supportedVersions", []):
+            self.die(f"server/discover does not offer {DISCOVER_PROTOCOL_VERSION}: {json.dumps(result)[:300]}")
+        return result
 
     def shutdown(self):
         """Close stdin like a client would and require a clean exit."""
@@ -299,12 +317,51 @@ def run_with_malformed_mongo(command, args):
                       f"run 3 ({label})")
 
 
+def run_with_discover(command, args):
+    """Run 4: the server/discover path that current clients (Claude Code, OpenAI Agents SDK) use.
+    No MongoDB first, then each malformed NO2SQL_MONGO, with the same error and leak checks."""
+    canary = "no2sql-canary-" + secrets.token_hex(12)
+    env = base_env()
+    env["NO2SQL_SMOKE_CANARY"] = canary
+    server = StdioServer(command, env, args.timeout)
+    found = server.discover()
+    name = found.get("_meta", {}).get("io.modelcontextprotocol/serverInfo", {}).get("name")
+    print(f"server/discover OK: {name} ({DISCOVER_PROTOCOL_VERSION})")
+    tools = server.request("tools/list")["result"]["tools"]
+    check_tools(tools, args.expected_tools, args.require_annotations)
+    result = server.request("tools/call", {"name": "test_connectivity", "arguments": {}}, allow_error=True)
+    if "error" in result or result["result"].get("isError"):
+        server.die(f"test_connectivity failed on the discover path: {json.dumps(result)[:300]}")
+    result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
+    check_tool_error(server, result, f"discover: tools/call {MONGO_TOOL} without MongoDB", args.require_tool_errors)
+    server.shutdown()
+    print("run 4 (discover, no MongoDB): clean exit")
+    check_no_leak(server, {"canary environment value": canary}, "run 4 (discover, no MongoDB)")
+
+    for label, template in MALFORMED_MONGO_VARIANTS:
+        fake_pw = secrets.token_hex(16)
+        conn = template.format(pw=fake_pw)
+        env = base_env()
+        env["NO2SQL_MONGO"] = conn
+        server = StdioServer(command, env, args.timeout)
+        server.discover()
+        result = server.request("tools/call", {"name": MONGO_TOOL, "arguments": {}}, allow_error=True)
+        check_tool_error(server, result, f"discover: tools/call {MONGO_TOOL} with malformed NO2SQL_MONGO ({label})",
+                         args.require_tool_errors)
+        server.shutdown()
+        print(f"run 4 (discover, malformed NO2SQL_MONGO, {label}): clean exit")
+        check_no_leak(server, {"MongoDB password": fake_pw, "MongoDB connection string": conn},
+                      f"run 4 (discover, {label})")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-tools", type=int, default=10)
     parser.add_argument("--require-annotations", action="store_true")
     parser.add_argument("--require-tool-errors", action="store_true",
                         help="failing MongoDB tool calls must return isError: true")
+    parser.add_argument("--require-discover", action="store_true",
+                        help=f"also run the server/discover ({DISCOVER_PROTOCOL_VERSION}) path")
     parser.add_argument("--timeout", type=float, default=45, help="seconds to wait for each response")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -315,6 +372,8 @@ def main():
     run_without_mongo(command, args)
     run_with_fake_mongo(command, args)
     run_with_malformed_mongo(command, args)
+    if args.require_discover:
+        run_with_discover(command, args)
     print("MCP smoke test passed")
 
 

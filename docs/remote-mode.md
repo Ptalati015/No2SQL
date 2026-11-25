@@ -47,7 +47,7 @@ Generate a random token and give it to No2SQL:
 export NO2SQL_HTTP_TOKEN="$(openssl rand -base64 32)"
 ```
 
-- The token must be at least 32 characters. Short tokens, tokens with fewer than 10 distinct characters, and placeholder values like `changeme` are refused at start-up.
+- The token must be at least 32 characters, using only letters, digits and `- . _ ~ + /` (with `=` allowed at the end), as `openssl rand -base64` produces. A passphrase with spaces or other symbols is refused. Short tokens, tokens with fewer than 10 distinct characters, and placeholder values like `changeme` are refused at start-up.
 - Clients must send it as `Authorization: Bearer <token>`. No2SQL ignores a token anywhere else (query string, cookie or body).
 
 ### Built-in sign-in
@@ -101,7 +101,7 @@ How long things last: access tokens 60 minutes (or `NO2SQL_OAUTH_ACCESS_TOKEN_MI
 > - **The owner password is the only credential.** There is no user name and no second factor. Anyone who knows the password can approve any client, including their own. Use a long random password, never reuse it, and keep it in a password manager. Login attempts are rate-limited, which makes guessing a long random password impractical but doesn't protect a dictionary word.
 > - **`No2SQL oauth revoke-all` is the panic button.** It deletes every refresh token and every never-approved client, forgets remembered approvals, and replaces the signing key, so every access token stops working within a second. Run it if you suspect the password, the data directory or a connected AI account was compromised, then change the owner password.
 > - **`NO2SQL_PUBLIC_URL` must be the exact public origin**: the scheme, host and port that clients type, with no path. Every address No2SQL publishes (sign-in pages, token endpoint, the audience of every token) is built from it, and it never trusts the `Host` or `X-Forwarded-*` headers for this. If it doesn't match the URL you give ChatGPT or claude.ai, sign-in fails.
-> - **If you let No2SQL generate the password, it is in the server's log.** In a container, anyone who can run `docker logs` can read it. After you've saved it, recreate the container to drop that log (`docker compose up -d --force-recreate no2sql`). The data directory keeps the password's hash, so the password stays the same.
+> - **If you let No2SQL generate the password, it is in the server's log.** In a container, anyone who can run `docker logs` can read it. After you've saved it, recreate the container to drop that log (`docker compose up -d --force-recreate no2sql`). The data directory keeps the password's hash, so the password stays the same. Recreating clears only Docker's local log: if your logs are shipped to another system, the password is there too, so set `NO2SQL_OWNER_PASSWORD` instead.
 > - **Every approved client can read everything the connection string and allow-list permit.** There is no per-client limit in 1.2.0. Use a read-only MongoDB user and `NO2SQL_ALLOWED_DATABASES` (section 3).
 > - **Refresh tokens are stored by OpenAI or Anthropic.** If one of those accounts is compromised, it can read your data until you run `revoke-all`, for 30 days at most.
 > - **One owner, one server.** The built-in sign-in is for a single person and a single running copy of No2SQL. Two replicas would not share sign-ins or rate limits.
@@ -170,7 +170,7 @@ What the example sets, and why:
 
 - `stop_grace_period: 30s`. By default, `docker stop` kills a container 10 seconds after asking it to stop. The longer grace period lets tool calls in flight finish.
 - `NO2SQL_MONGO_FILE: /run/secrets/mongo`, from the Compose secret `./secrets/mongo.txt`. Compose mounts it with the host file's owner and mode, which is why step 4 sets them.
-- `./data:/data`. `/data` is the only writable path in the container, and the image sets `NO2SQL_DATA_DIR=/data`. The built-in sign-in keeps its state there (see the security note in section 2). A token or an external identity provider writes nothing there. A folder Docker creates for a bind mount belongs to root, which is why step 1 creates it.
+- `./data:/data`. `/data` is the only writable path in the container, and the image sets `NO2SQL_DATA_DIR=/data`. The built-in sign-in keeps its state there (see the security note in section 2). A token or an external identity provider writes nothing there. A folder Docker creates for a bind mount belongs to root, which is why step 1 creates it. The `data/` folder on the host is the data directory, so a backup of the Compose folder includes the signing key: treat it like a password file.
 - `NO2SQL_HTTP_TRUSTED_PROXIES: "172.30.87.2/32"`, Caddy's fixed address, so rate limits see the real client address. `NO2SQL_HTTP_HSTS: "true"`, because Caddy always serves HTTPS.
 - `read_only: true`, `cap_drop: [ALL]` and `no-new-privileges`.
 - `.env`, `no2sql.env`, `secrets/` and `data/` are git-ignored. Never commit them.
@@ -292,4 +292,4 @@ With the built-in sign-in or an identity provider, leave out `headers`, and Clau
 | 403 `insufficient_scope` | The token lacks `NO2SQL_OAUTH_SCOPE` (default `mcp:tools`). |
 | 403 on a request from a browser page | The page's `Origin` isn't allowed. Add it to `NO2SQL_HTTP_ALLOWED_ORIGINS`. |
 | 429 | A rate limit was hit. The response's `Retry-After` says when to try again. Raise `NO2SQL_HTTP_RATE_LIMIT_PER_MINUTE` for a legitimate busy client. |
-| A tool answers "NO2SQL_MONGO is not set" | Set `NO2SQL_MONGO` or `NO2SQL_MONGO_FILE` in the server's environment, not in the client. |
+| A tool answers "No MongoDB connection string is set" or "…is not a valid MongoDB connection string" | Set or correct `NO2SQL_MONGO`, or the file `NO2SQL_MONGO_FILE` points to, in the server's environment (not in the client), then restart the server. |

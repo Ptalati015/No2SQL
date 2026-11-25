@@ -94,7 +94,7 @@ No2SQL reads these environment variables. Set them in your MCP client's `env` co
 | `NO2SQL_ALLOWED_DATABASES` | Recommended | Comma-separated list of the databases No2SQL may read, for example `sales,inventory`. If it is empty, every database is readable except the system ones. |
 | `NO2SQL_BLOCK_SYSTEM_DATABASES` | No | Defaults to `true`, which blocks `admin`, `config` and `local` and hides them from `list_databases`, even if they are in `NO2SQL_ALLOWED_DATABASES`. Leave it on. |
 
-Without `NO2SQL_MONGO` the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that `NO2SQL_MONGO` is not set, and if the value isn't a valid MongoDB connection string, the error says that instead. Fix it in your client's `env` config and restart the server.
+Without a connection string the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that no MongoDB connection string is set, and if the value isn't a valid MongoDB connection string, the error says that instead. Set or correct `NO2SQL_MONGO` (or the file that `NO2SQL_MONGO_FILE` points to) where the server runs, then restart the server. For a local server, that is your client's `env` config. For a remote server, it is the server's own environment.
 
 ## Set up your AI client
 
@@ -295,7 +295,7 @@ Generate a Mermaid ERD for mydb.
 Generate SQL INSERT statements for the orders collection in mydb.
 ```
 
-If a tool answers that `NO2SQL_MONGO` is not set, add it to the `env` block of your client config and restart the client. `test_connectivity` works without it, so it only shows that the server is running.
+If a tool answers that no MongoDB connection string is set, add `NO2SQL_MONGO` to the `env` block of your client config and restart the client. `test_connectivity` works without it, so it only shows that the server is running.
 
 ## MCP tools
 

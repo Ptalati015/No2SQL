@@ -62,9 +62,36 @@
     <None Include="..\TRADEMARK.md" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 
+  <!--
+    HTTP mode (opt-in, see Hosting/HttpServer.cs) runs on ASP.NET Core, so the self-contained build
+    carries the Microsoft.AspNetCore.App shared framework. That framework also supplies
+    Microsoft.Extensions.Hosting and the rest of Microsoft.Extensions.* for the stdio host, at the
+    same patch level as the .NET runtime, so there is no separate package pin for them.
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!--
+    ASP.NET Core's Windows runtime pack carries aspnetcorev2_inprocess.dll, the IIS in-process handler.
+    No2SQL never runs inside IIS, so the file is dropped from the deps file and from publish: otherwise
+    it would sit next to No2SQL.exe in the win RID packages, or be bundled into the zip exe and
+    extracted to a temp folder on first start.
+  -->
+  <Target Name="DropIisHandlerFromDeps" AfterTargets="ResolveRuntimePackAssets">
+    <ItemGroup>
+      <RuntimePackAsset Remove="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'aspnetcorev2_inprocess.dll'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="DropIisHandlerFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Filename)%(Extension)' == 'aspnetcorev2_inprocess.dll'" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="2.4.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>

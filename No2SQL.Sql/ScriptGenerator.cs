@@ -100,11 +100,11 @@ public class ScriptGenerator
         return GenerateSqlFromInference(collections, merged);
     }
 
-    public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName)
+    public async Task<List<string>> GenerateInsertStatementsForCollection(string databaseName, string collectionName, CancellationToken cancellationToken = default)
     {
         var statements = new List<string>();
 
-        await foreach (var statement in GenerateInsertStatementsForCollectionStream(databaseName, collectionName))
+        await foreach (var statement in GenerateInsertStatementsForCollectionStream(databaseName, collectionName, cancellationToken: cancellationToken))
         {
             statements.Add(statement);
         }

@@ -15,6 +15,9 @@ value or the fake password shows up in any stdout or stderr output. With
 tool results with `isError: true`, so clients can tell they failed, and
 test_connectivity must succeed without MongoDB. Run 3 uses a malformed connection
 string (fails parsing) carrying a secret password, which must not leak either.
+Run 4 sets NO2SQL_ALLOWED_DATABASES and asks for a database outside it and for a system
+database: the tool results must say why (the allow-list or the system-database block), name
+only the requested database, never the allowed ones, and the reason must still reach stderr.
 
 Usage:
   mcp_smoke_test.py [--expected-tools N] [--require-annotations] [--require-tool-errors]
@@ -299,6 +302,48 @@ def run_with_malformed_mongo(command, args):
                       f"run 3 ({label})")
 
 
+# A tool that takes a database name, for the allow-list checks.
+DATABASE_TOOL = "generate_sql_schema"
+
+
+def run_with_allow_list(command, args):
+    allowed = ["smoke_allowed_" + secrets.token_hex(4), "smoke_other_" + secrets.token_hex(4)]
+    refused = "smoke_refused_" + secrets.token_hex(4)
+    env = base_env()
+    # Unreachable on purpose: the policy check must answer before any MongoDB call.
+    env["NO2SQL_MONGO"] = "mongodb://127.0.0.1:9/?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000"
+    env["NO2SQL_ALLOWED_DATABASES"] = ",".join(allowed)
+    env.pop("NO2SQL_BLOCK_SYSTEM_DATABASES", None)
+
+    server = StdioServer(command, env, args.timeout)
+    server.handshake()
+    cases = [
+        (refused, f"Database '{refused}' is not in NO2SQL_ALLOWED_DATABASES on this server."),
+        ("admin", "Database 'admin' is a MongoDB system database, and this server blocks system databases"),
+    ]
+    for database, expected in cases:
+        label = f"tools/call {DATABASE_TOOL} for '{database}' with an allow-list"
+        result = server.request("tools/call", {"name": DATABASE_TOOL, "arguments": {"databaseName": database}},
+                                allow_error=True)
+        check_tool_error(server, result, label, require_tool_errors=True)
+        text = " ".join(item.get("text", "") for item in result["result"].get("content", []))
+        if expected not in text:
+            server.die(f"{label}: expected {expected!r} in the tool result, got {text[:300]!r}")
+        for name in allowed:
+            if name in text:
+                server.die(f"{label}: the tool result lists an allowed database name")
+        if "error id" not in text:
+            server.die(f"{label}: the tool result has no error id to match the server log")
+        print(f"{label}: says why, lists no allowed name")
+    server.shutdown()
+
+    stderr = server.output()
+    for line in (f"Database '{refused}' is not in NO2SQL_ALLOWED_DATABASES.", "Database 'admin' is blocked by policy."):
+        if line not in stderr:
+            server.die(f"run 4: stderr no longer has {line!r}")
+    print("run 4 (allow-list and system databases): clean exit, reasons still on stderr")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-tools", type=int, default=10)
@@ -315,6 +360,7 @@ def main():
     run_without_mongo(command, args)
     run_with_fake_mongo(command, args)
     run_with_malformed_mongo(command, args)
+    run_with_allow_list(command, args)
     print("MCP smoke test passed")
 
 

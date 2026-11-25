@@ -19,15 +19,16 @@ namespace No2SQL.Tests.Infrastructure;
 /// using var app = new No2SqlHttpApp(services => services.AddSingleton&lt;TimeProvider&gt;(clock));
 /// </code>
 /// </example>
-public sealed class No2SqlHttpApp : IDisposable
+internal sealed class No2SqlHttpApp : IDisposable
 {
     private readonly Factory _factory;
 
     /// <param name="configureTestServices">Runs after the application's own registrations, so it can replace them.</param>
     /// <param name="mongoConnectionString">What NO2SQL_MONGO would hold. Null means "not set".</param>
-    public No2SqlHttpApp(Action<IServiceCollection>? configureTestServices = null, string? mongoConnectionString = null)
+    /// <param name="auth">The sign-in settings. Null means none (anonymous HTTP mode).</param>
+    public No2SqlHttpApp(Action<IServiceCollection>? configureTestServices = null, string? mongoConnectionString = null, HttpAuthOptions? auth = null)
     {
-        _factory = new Factory(mongoConnectionString, configureTestServices);
+        _factory = new Factory(mongoConnectionString, auth ?? HttpAuthOptions.None, configureTestServices);
     }
 
     /// <summary>The application's service provider.</summary>
@@ -42,8 +43,8 @@ public sealed class No2SqlHttpApp : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    // Program is internal to No2SQL, so the factory stays internal and this class wraps it.
-    private sealed class Factory(string? mongoConnectionString, Action<IServiceCollection>? configureTestServices)
+    // Program is internal to No2SQL, so the factory is nested here rather than exposed.
+    private sealed class Factory(string? mongoConnectionString, HttpAuthOptions auth, Action<IServiceCollection>? configureTestServices)
         : WebApplicationFactory<Program>
     {
         // No2SQL's entry point decides between stdio and HTTP from the command line and builds its
@@ -52,7 +53,7 @@ public sealed class No2SqlHttpApp : IDisposable
         protected override IHostBuilder CreateHostBuilder() =>
             new HostBuilder().ConfigureWebHost(web =>
             {
-                web.ConfigureServices(services => HttpServer.ConfigureServices(services, mongoConnectionString));
+                web.ConfigureServices(services => HttpServer.ConfigureServices(services, mongoConnectionString, auth));
                 web.Configure(HttpServer.ConfigurePipeline);
             });
 

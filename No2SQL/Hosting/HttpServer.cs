@@ -34,16 +34,19 @@ internal static class HttpServer
             return ConfigurationError;
         }
 
-        // HTTP mode has no authentication yet, so it must not be reachable from other machines by
-        // accident: anything but a loopback address needs the explicit --allow-anonymous flag.
-        var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
-        if (exposed.Count > 0 && !options.AllowAnonymous)
+        if (!HttpAuthOptions.TryParse(Environment.GetEnvironmentVariable, out var auth, out error))
         {
-            Console.Error.WriteLine(
-                $"[No2SQL] Refusing to start: {string.Join(", ", exposed)} can be reached from other machines and HTTP mode has no authentication. " +
-                $"Listen on a loopback address (the default is {HttpBindings.DefaultUrls}), or pass {StartupOptions.AllowAnonymousFlag} to expose the MongoDB tools to anyone who can reach that address.");
+            Console.Error.WriteLine($"[No2SQL] {error}");
             return ConfigurationError;
         }
+
+        if (StartupRefusal(bindings, auth, options.AllowAnonymous) is { } refusal)
+        {
+            Console.Error.WriteLine($"[No2SQL] {refusal}");
+            return ConfigurationError;
+        }
+
+        var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
 
         // HTTP mode logs to stdout, the stream container platforms collect (in stdio mode stdout belongs
         // to the MCP protocol, so logs go to stderr there). The code shared with stdio writes its notices
@@ -59,10 +62,13 @@ internal static class HttpServer
         // check above cannot be bypassed by another configuration source adding an endpoint.
         var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
 
-        // ASP.NET Core's own categories are limited to warnings so request lines (path and query
-        // string) are not logged. The level cannot be lowered from outside: there is no configuration source.
+        // ASP.NET Core's own categories are limited to warnings so request lines (path, query string,
+        // headers) are never logged. The level cannot be lowered from outside: there is no configuration
+        // source. The sign-in handler's base class logs every unauthenticated request at Information;
+        // the handler writes its own line with the reason instead.
         builder.Logging.AddConsole();
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+        builder.Logging.AddFilter(typeof(BearerAuthenticationHandler).FullName, LogLevel.Warning);
 
         builder.WebHost.UseKestrelCore().ConfigureKestrel(kestrel =>
         {
@@ -84,7 +90,7 @@ internal static class HttpServer
             }
         });
 
-        ConfigureServices(builder.Services, mongoConn);
+        ConfigureServices(builder.Services, mongoConn, auth);
 
         await using var app = builder.Build();
         ConfigurePipeline(app);
@@ -102,8 +108,23 @@ internal static class HttpServer
             return 1;
         }
 
-        // Written on every start, never only once: there is no sign-in in front of the tools yet.
-        if (exposed.Count > 0)
+        // Written on every start, never only once.
+        if (auth.RequiresSignIn)
+        {
+            var methods = new List<string>();
+            if (auth.HasStaticToken)
+            {
+                methods.Add($"the bearer token in {HttpAuthOptions.TokenVariable}");
+            }
+
+            if (auth.HasAuthority)
+            {
+                methods.Add($"access tokens from {auth.Authority} for {auth.McpUrl} with scope {auth.Scope}");
+            }
+
+            Console.Out.WriteLine($"[No2SQL] Sign-in required on {McpPath}: {string.Join(", or ", methods)}.");
+        }
+        else if (exposed.Count > 0)
         {
             Console.Out.WriteLine(
                 $"[No2SQL] WARNING: {StartupOptions.AllowAnonymousFlag} is set. {string.Join(", ", exposed)} has no authentication: anyone who can reach it can use the MongoDB tools.");
@@ -121,12 +142,37 @@ internal static class HttpServer
     }
 
     /// <summary>
-    /// The services of HTTP mode: the shared No2SQL services and tools, routing, and the MCP SDK's
-    /// Streamable HTTP transport.
+    /// Why HTTP mode must not start with these settings, or null when it may. Without sign-in the
+    /// server must not be reachable from other machines by accident: anything but a loopback address
+    /// needs sign-in configured or the explicit --allow-anonymous flag.
     /// </summary>
-    public static void ConfigureServices(IServiceCollection services, string? mongoConnectionString)
+    public static string? StartupRefusal(IReadOnlyList<HttpBinding> bindings, HttpAuthOptions auth, bool allowAnonymous)
+    {
+        if (allowAnonymous && auth.RequiresSignIn)
+        {
+            return $"{StartupOptions.AllowAnonymousFlag} cannot be combined with {HttpAuthOptions.TokenVariable} or {HttpAuthOptions.AuthorityVariable}. " +
+                "Remove the flag to require sign-in, or unset both variables to run without it.";
+        }
+
+        var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
+        if (exposed.Count > 0 && !auth.RequiresSignIn && !allowAnonymous)
+        {
+            return $"Refusing to start: {string.Join(", ", exposed)} can be reached from other machines and no sign-in is configured. " +
+                $"Set {HttpAuthOptions.TokenVariable} or {HttpAuthOptions.AuthorityVariable}, listen on a loopback address (the default is {HttpBindings.DefaultUrls}), " +
+                $"or pass {StartupOptions.AllowAnonymousFlag} to expose the MongoDB tools to anyone who can reach that address.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The services of HTTP mode: the shared No2SQL services and tools, routing, sign-in when it is
+    /// configured, and the MCP SDK's Streamable HTTP transport.
+    /// </summary>
+    public static void ConfigureServices(IServiceCollection services, string? mongoConnectionString, HttpAuthOptions auth)
     {
         services.AddRoutingCore();
+        services.AddNo2SqlHttpAuth(auth);
         services
             .AddNo2SqlServices(mongoConnectionString)
             // Stateless Streamable HTTP: no Mcp-Session-Id, no GET stream, no legacy SSE endpoints.
@@ -135,12 +181,21 @@ internal static class HttpServer
     }
 
     /// <summary>
-    /// The whole request pipeline: routing and two endpoints. There is deliberately no developer
-    /// exception page, no static files, no HTTPS redirection and no request logging.
+    /// The whole request pipeline: routing, sign-in when it is configured, the MCP endpoint, the health
+    /// check and (with an identity provider) the protected resource metadata. There is deliberately no
+    /// developer exception page, no static files, no HTTPS redirection and no request logging.
     /// </summary>
     public static void ConfigurePipeline(IApplicationBuilder app)
     {
+        var auth = app.ApplicationServices.GetRequiredService<HttpAuthOptions>();
+
         app.UseRouting();
+        if (auth.RequiresSignIn)
+        {
+            app.UseAuthentication();
+            app.UseAuthorization();
+        }
+
         app.UseEndpoints(endpoints =>
         {
             // Liveness only: no authentication, no MongoDB call, a fixed body.
@@ -150,7 +205,13 @@ internal static class HttpServer
                 context.Response.Headers.CacheControl = "no-store";
                 return context.Response.WriteAsync(HealthBody);
             });
-            endpoints.MapMcp(McpPath);
+
+            var mcp = endpoints.MapMcp(McpPath);
+            if (auth.RequiresSignIn)
+            {
+                mcp.RequireAuthorization(HttpAuth.McpPolicy);
+                endpoints.MapNo2SqlAuthEndpoints(auth);
+            }
         });
     }
 }

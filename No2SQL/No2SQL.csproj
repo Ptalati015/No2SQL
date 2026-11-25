@@ -92,6 +92,8 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="2.4.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
+    <!-- HTTP mode with an external identity provider: JWT access-token validation (see Hosting/Auth). -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup>

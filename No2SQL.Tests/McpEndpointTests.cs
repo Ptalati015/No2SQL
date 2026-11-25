@@ -104,7 +104,11 @@ public class McpEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, reply.Http.StatusCode);
         Assert.True((bool?)reply.Result["isError"]);
-        Assert.StartsWith("NO2SQL_MONGO is not set.", (string?)reply.Result["content"]?[0]?["text"]);
+        Assert.Equal(
+            "No MongoDB connection string is set. Whoever runs this server sets NO2SQL_MONGO, or " +
+            "NO2SQL_MONGO_FILE to a file that holds it, in the server's environment (for a local server, the " +
+            "env section of the MCP client's configuration), then restarts the server.",
+            (string?)reply.Result["content"]?[0]?["text"]);
     }
 
     [Fact]
@@ -120,7 +124,11 @@ public class McpEndpointTests
 
         var json = reply.Message!.ToJsonString();
         Assert.True((bool?)reply.Result["isError"]);
-        Assert.StartsWith("NO2SQL_MONGO is not a valid MongoDB connection string.", (string?)reply.Result["content"]?[0]?["text"]);
+        Assert.Matches(
+            "^The value of NO2SQL_MONGO or NO2SQL_MONGO_FILE is not a valid MongoDB connection string\\. Whoever " +
+            "runs this server corrects it in the server's environment, then restarts the server\\. " +
+            "See server logs with error id [0-9a-f]{8}\\.$",
+            (string?)reply.Result["content"]?[0]?["text"]);
         Assert.DoesNotContain(password, json);
         Assert.DoesNotContain("db.internal.example", json);
     }

@@ -18,10 +18,18 @@ using No2SQL.Visuals;
 // OperationCanceledException instead of returning an error result, so the MCP SDK drops the request.
 internal class SchemaTools
 {
-    // Returned by every tool that reads MongoDB when NO2SQL_MONGO is not set. Fixed text, no values.
+    // Returned by every tool that reads MongoDB when no connection string is set. Fixed text, no values.
+    // Worded for both modes: the person calling the tool may not be the one who runs the server (a
+    // remote HTTP server used from ChatGPT or claude.ai), and the string may come from a file.
     private const string MongoNotConfiguredMessage =
-        "NO2SQL_MONGO is not set. Set the NO2SQL_MONGO environment variable to your MongoDB connection string " +
-        "in this server's MCP client configuration, then restart the server.";
+        "No MongoDB connection string is set. Whoever runs this server sets NO2SQL_MONGO, or " +
+        "NO2SQL_MONGO_FILE to a file that holds it, in the server's environment (for a local server, the " +
+        "env section of the MCP client's configuration), then restarts the server.";
+
+    // The start of the message for a connection string the driver can't parse. Never quotes the value.
+    private const string MongoInvalidMessage =
+        "The value of NO2SQL_MONGO or NO2SQL_MONGO_FILE is not a valid MongoDB connection string. Whoever " +
+        "runs this server corrects it in the server's environment, then restarts the server.";
 
     private readonly MongoConnection _mongo;
     private readonly SchemaAnalyzer _analyzer;
@@ -420,8 +428,7 @@ internal class SchemaTools
             Console.Error.WriteLine(
                 $"[MCP:{errorId}] {operation} not run: NO2SQL_MONGO is not a valid MongoDB connection string ({invalid.CauseType}).");
 
-            return "NO2SQL_MONGO is not a valid MongoDB connection string. Correct it in this server's MCP client " +
-                $"configuration, then restart the server. See server logs with error id {errorId}.";
+            return $"{MongoInvalidMessage} See server logs with error id {errorId}.";
         }
 
         var subjectSuffix = string.IsNullOrWhiteSpace(subject) ? string.Empty : $" for '{SanitizeLabel(subject)}'";

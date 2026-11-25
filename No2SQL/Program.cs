@@ -1,52 +1,46 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using No2SQL.Core;
+using No2SQL.Hosting;
 using No2SQL.Security;
-using No2SQL.Sql;
-using No2SQL.Visuals;
 
 [assembly: InternalsVisibleTo("No2SQL.Test")]
+[assembly: InternalsVisibleTo("No2SQL.Tests")]
 
-var builder = Host.CreateApplicationBuilder(args);
-
-// Configure all logs to go to stderr (stdout is used for the MCP protocol messages).
-builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-
-// NO2SQL_MONGO is the only source of the MongoDB connection string. It is not parsed here:
-// MongoConnection builds the client on the first tool call that needs it, so the server starts,
-// lists its tools and answers test_connectivity even when the variable is missing or wrong.
-var mongoConn = Environment.GetEnvironmentVariable("NO2SQL_MONGO");
-if (string.IsNullOrWhiteSpace(mongoConn))
+// stdio is the default transport. HTTP mode is opt-in with --http or NO2SQL_TRANSPORT=http.
+if (!StartupOptions.TryParse(args, Environment.GetEnvironmentVariable(StartupOptions.TransportVariable), out var startup, out var startupError))
 {
-    Console.Error.WriteLine(
-        "[No2SQL] NO2SQL_MONGO is not set. The server is running, but tools that read MongoDB will ask for it.");
+    Console.Error.WriteLine($"[No2SQL] {startupError}");
+    return 2;
 }
 
-builder.Services.AddSingleton(new MongoConnection(mongoConn));
-builder.Services.AddScoped(sp => new SchemaAnalyzer(sp.GetRequiredService<MongoConnection>()));
-builder.Services.AddScoped(sp => new ScriptGenerator(sp.GetRequiredService<MongoConnection>()));
-builder.Services.AddScoped(sp => new ErdGenerator());
-builder.Services.AddSingleton(sp => new McpGuardrails());
+if (startup.Transport == TransportKind.Http)
+{
+    return await HttpServer.RunAsync(startup);
+}
 
+// Every stderr line is masked for the secrets this process knows. stdout carries the MCP protocol
+// and is not touched.
+RedactingTextWriter.InstallOnConsole(SecretRedactor.Process, includeStdout: false);
+SecretRedactor.Process.AddSecretVariables(Environment.GetEnvironmentVariable);
 
-// Report the package version (e.g. "1.0.3") in the MCP initialize response instead of the
-// four-part assembly version. Build metadata after '+' (commit hash) is dropped.
-var informationalVersion = typeof(Program).Assembly
-    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-var serverVersion = string.IsNullOrWhiteSpace(informationalVersion)
-    ? typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"
-    : informationalVersion.Split('+')[0];
+if (!No2SqlServices.TryReadMongoConnectionString(out var mongoConn, out var mongoError))
+{
+    Console.Error.WriteLine($"[No2SQL] {mongoError}");
+    return 2;
+}
 
-// Add the MCP services: the transport to use (stdio) and the tools to register.
+var builder = Host.CreateApplicationBuilder(startup.HostArgs);
+
+// Configure all logs to go to stderr (stdout is used for the MCP protocol messages), one line each.
+builder.Logging.AddSimpleConsole(o => o.SingleLine = true);
+builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+
+// The services and tools are shared with HTTP mode; only the transport differs.
 builder.Services
-    .AddMcpServer(options =>
-    {
-        options.ServerInfo = new() { Name = "No2SQL", Version = serverVersion };
-    })
-    .WithStdioServerTransport()
-    .WithTools<SchemaTools>();
+    .AddNo2SqlServices(mongoConn)
+    .WithStdioServerTransport();
 
 await builder.Build().RunAsync();
+return 0;

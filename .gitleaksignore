@@ -1,3 +1,7 @@
 # False positive: the MCP smoke test generated a random throwaway Mongo password per run
 # (secrets.token_hex), not a real secret. The line was reworded in the next commit.
 d312961b789b298dc8b8fe7e748e5e179870cb50:.github/scripts/mcp_smoke_test.py:generic-api-key:237
+
+# False positive: a test canary in the P2-7 audit test (commit 25ed0e8), not a credential. The
+# next commit builds the canaries at runtime; the fingerprint stays because gitleaks scans history.
+25ed0e8f8f13cb0726b8ad280c9a2c0eab75ff5e:No2SQL.Tests/ToolCallAuditTests.cs:generic-api-key:101

@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.IdentityModel.Tokens;
 using No2SQL.Hosting;
@@ -606,6 +607,49 @@ public sealed class OAuthCliAndStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task Sessions_and_form_tokens_use_no_Data_Protection_key_ring()
+    {
+        // Sessions and anti-forgery tokens are random values held in memory, so nothing is written outside the
+        // data directory (the container image has a read-only file system apart from it).
+        var keyRing = new RecordingKeyRing();
+        using var server = new BuiltinAuthServer(services =>
+            services.Configure<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>(options => options.XmlRepository = keyRing));
+
+        var signedIn = await server.SignInAsync();
+        await server.RefreshAsync(signedIn.RefreshToken, signedIn.ClientId);
+        await server.McpStatusAsync(signedIn.AccessToken);
+        server.Cli("rotate-keys");
+
+        Assert.Equal(0, keyRing.Calls);
+        Assert.Null(server.Services.GetService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>());
+    }
+
+    private sealed class RecordingKeyRing : Microsoft.AspNetCore.DataProtection.Repositories.IXmlRepository
+    {
+        private readonly List<System.Xml.Linq.XElement> _elements = [];
+
+        public int Calls;
+
+        public IReadOnlyCollection<System.Xml.Linq.XElement> GetAllElements()
+        {
+            Interlocked.Increment(ref Calls);
+            lock (_elements)
+            {
+                return [.. _elements];
+            }
+        }
+
+        public void StoreElement(System.Xml.Linq.XElement element, string friendlyName)
+        {
+            Interlocked.Increment(ref Calls);
+            lock (_elements)
+            {
+                _elements.Add(element);
+            }
+        }
+    }
+
+    [Fact]
     public async Task A_restart_keeps_the_keys_the_clients_and_the_refresh_tokens()
     {
         var signedIn = await _server.SignInAsync();
@@ -625,7 +669,7 @@ public sealed class OAuthCliAndStorageTests : IDisposable
             OwnerPassword = _server.Password,
             AccessTokenLifetime = TimeSpan.FromMinutes(60),
         };
-        using var restarted = new No2SqlHttpApp(services => Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<TimeProvider>(services, _server.Clock), auth: auth);
+        using var restarted = new No2SqlHttpApp(services => services.AddSingleton<TimeProvider>(_server.Clock), auth: auth);
         using var client = restarted.CreateClient();
 
         using var form = new FormUrlEncodedContent(new Dictionary<string, string>

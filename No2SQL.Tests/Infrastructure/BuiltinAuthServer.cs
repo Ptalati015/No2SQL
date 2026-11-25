@@ -301,9 +301,9 @@ internal sealed partial class BuiltinAuthServer : IDisposable
             .Single(k => (string?)k!["status"] == "active")!["kid"]!;
 
     /// <summary>Authorize and exchange the code: a signed-in client with its first tokens.</summary>
-    public async Task<SignedIn> SignInAsync(string? clientId = null, string scope = "mcp:tools offline_access")
+    public async Task<SignedIn> SignInAsync(string? clientId = null, string scope = "mcp:tools offline_access", string redirectUri = "https://client.example.test/callback")
     {
-        var flow = await AuthorizeFullyAsync(clientId, scope: scope);
+        var flow = await AuthorizeFullyAsync(clientId, redirectUri, scope);
         var (status, body) = await ExchangeAsync(flow);
         Assert.Equal(HttpStatusCode.OK, status);
         return new SignedIn(flow, (string)body!["access_token"]!, (string)body["refresh_token"]!);

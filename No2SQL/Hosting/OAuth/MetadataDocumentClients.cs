@@ -225,8 +225,14 @@ internal sealed class MetadataDocumentClients : IDisposable
 
             if (!_inFlight.TryGetValue(clientId, out task!))
             {
+                // A fetch that is already over (refused by the limit) has cleaned up after itself; registering
+                // it now would leave its answer in place of every later fetch. One still running takes the
+                // lock before it removes itself, so it cannot do that before it is registered here.
                 task = FetchAndCacheAsync(clientId);
-                _inFlight[clientId] = task;
+                if (!task.IsCompleted)
+                {
+                    _inFlight[clientId] = task;
+                }
             }
         }
 

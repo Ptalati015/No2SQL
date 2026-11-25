@@ -15,7 +15,9 @@ chmod 600 .env no2sql.env
 
 mkdir -p secrets data
 # Type or paste the connection string at the prompt, so it stays out of your shell history.
-IFS= read -rs -p 'MongoDB connection string: ' conn && printf '%s' "$conn" > secrets/mongo.txt && unset conn; echo
+# The subshell's umask creates the file as 0600 from the start (works in bash and zsh).
+printf 'MongoDB connection string: '; stty -echo; IFS= read -r conn; stty echo; echo
+(umask 077 && printf '%s' "$conn" > secrets/mongo.txt); unset conn
 sudo chown 1654:1654 secrets/mongo.txt data      # 1654 is the image's non-root "app" user
 sudo chmod 0400 secrets/mongo.txt
 sudo chmod 0700 data
@@ -31,6 +33,8 @@ docker compose up -d
 - **`data/` must belong to UID 1654.** The container's root filesystem is read-only. `/data` is the
   only writable path, and a directory Docker creates for a bind mount belongs to root.
 - **`.env`, `no2sql.env`, `secrets/` and `data/` are git-ignored here.** Never commit them.
+- **Port 8080 in `docker inspect`** comes from the .NET base image (`ASPNETCORE_HTTP_PORTS`).
+  No2SQL ignores it and listens only on `NO2SQL_HTTP_URLS` (8787 in the image).
 
 ## Clients
 

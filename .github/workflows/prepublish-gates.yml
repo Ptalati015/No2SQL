@@ -60,8 +60,7 @@ jobs:
           dotnet list No2SQL.sln package --vulnerable --include-transitive | tee vulnerable.txt
 
           # Advisories with no upstream fix yet, one GHSA id per line with a comment saying why.
-          # Empty: GHSA-6c8g-7p36-r338 (SharpCompress 0.47.4) is fixed by MongoDB.Driver 3.14.1,
-          # which brings SharpCompress 0.48.1.
+          # Empty: GHSA-6c8g-7p36-r338 (SharpCompress zip-slip) is fixed by the 0.48.1 pin.
           SUPPRESSED=()
 
           FILTERED="$(cat vulnerable.txt)"

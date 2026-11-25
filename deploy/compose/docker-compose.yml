@@ -1,0 +1,71 @@
+# No2SQL remote mode behind Caddy (TLS), the P2-8 example.
+#
+# Before the first start (see README.md in this folder):
+#   1. Point a DNS name at this machine and put it in .env as NO2SQL_DOMAIN.
+#   2. Put a long random NO2SQL_HTTP_TOKEN in no2sql.env (chmod 600). Never commit either file.
+#   3. Put the MongoDB connection string (a read-only user) in secrets/mongo.txt, owned by
+#      UID 1654 (the image's "app" user) with mode 0400.
+#   4. mkdir data && sudo chown 1654:1654 data && chmod 700 data
+#
+# Only Caddy publishes ports. No2SQL is reachable only on the private network below, never on
+# the host, and it refuses to start on 0.0.0.0 without auth.
+
+name: no2sql
+
+services:
+  no2sql:
+    image: ghcr.io/ptalati015/no2sql:latest   # pin a version (for example :1.2.0) in production
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # docker stop sends SIGKILL after 10 s by default; give tool calls in flight the host's 30 s.
+    stop_grace_period: 30s
+    env_file: no2sql.env                      # NO2SQL_HTTP_TOKEN=... (or the OAuth settings)
+    environment:
+      NO2SQL_PUBLIC_URL: "https://${NO2SQL_DOMAIN:?set NO2SQL_DOMAIN in .env}"
+      # Only Caddy's fixed address may set X-Forwarded-For.
+      NO2SQL_HTTP_TRUSTED_PROXIES: "172.30.87.2/32"
+      NO2SQL_MONGO_FILE: /run/secrets/mongo
+      # Keep the tools to the databases they need.
+      NO2SQL_ALLOWED_DATABASES: "${NO2SQL_ALLOWED_DATABASES:-}"
+    secrets:
+      - mongo
+    volumes:
+      - ./data:/data
+    networks:
+      no2sql:
+        ipv4_address: 172.30.87.3
+
+  caddy:
+    image: caddy:2@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
+    restart: unless-stopped
+    environment:
+      NO2SQL_DOMAIN: "${NO2SQL_DOMAIN:?set NO2SQL_DOMAIN in .env}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - no2sql
+    networks:
+      no2sql:
+        ipv4_address: 172.30.87.2
+
+secrets:
+  mongo:
+    file: ./secrets/mongo.txt
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  no2sql:
+    ipam:
+      config:
+        - subnet: 172.30.87.0/24

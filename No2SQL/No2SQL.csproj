@@ -49,6 +49,66 @@
     <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
+  <!--
+    Container image (P2-8). Build it with
+      dotnet publish No2SQL/No2SQL.csproj -c Release -t:PublishContainer -p:No2SqlContainer=true
+    No2SqlContainer=true switches this project from the self-contained single-file exe (zips and dnx)
+    to a framework-dependent app on the chiseled ASP.NET Core base, because the SDK can only build a
+    multi-arch image framework-dependent. Result: linux-x64 and linux-arm64 in one image index,
+    no shell or package manager, the non-root "app" user (UID 1654), the base image's .NET runtime
+    (the release workflow gates it at 10.0.15 or later).
+    The image starts HTTP mode on 0.0.0.0:8787 and carries no auth and no secret. Until it gets
+    NO2SQL_HTTP_TOKEN or an OAuth setting at run time, HTTP mode refuses to start on 0.0.0.0.
+    "docker run -i -e NO2SQL_TRANSPORT=stdio" gives a stdio server instead.
+    The release workflow sets ContainerRegistry=ghcr.io and pushes.
+  -->
+  <PropertyGroup Label="Container image" Condition="'$(No2SqlContainer)' == 'true'">
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+    <UseCurrentRuntimeIdentifier>false</UseCurrentRuntimeIdentifier>
+    <!-- Lets the SDK add the org.opencontainers.image.source and .revision labels. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Container image">
+    <ContainerRepository>ptalati015/no2sql</ContainerRepository>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra</ContainerBaseImage>
+    <ContainerRuntimeIdentifiers>linux-x64;linux-arm64</ContainerRuntimeIdentifiers>
+    <ContainerImageTags>$(PackageVersion);latest</ContainerImageTags>
+    <ContainerUser>app</ContainerUser>
+    <ContainerTitle>No2SQL</ContainerTitle>
+  </PropertyGroup>
+
+  <ItemGroup Label="Container image">
+    <ContainerPort Include="8787" Type="tcp" />
+    <ContainerEnvironmentVariable Include="NO2SQL_TRANSPORT" Value="http" />
+    <ContainerEnvironmentVariable Include="NO2SQL_HTTP_URLS" Value="http://0.0.0.0:8787" />
+    <!-- No debugger, profiler or EventPipe IPC: nothing to attach to, and no files in /tmp, so a
+         read-only root filesystem works without a tmpfs. -->
+    <ContainerEnvironmentVariable Include="DOTNET_EnableDiagnostics" Value="0" />
+    <ContainerLabel Include="io.modelcontextprotocol.server.name" Value="io.github.Ptalati015/no2sql" />
+  </ItemGroup>
+
+  <!--
+    Workaround for an SDK container bug (seen on 10.0.115): a multi-arch publish hands labels and
+    environment variables to each per-arch build as "name:value" strings, and the per-arch build
+    splits them at every colon and keeps only the first two parts. NO2SQL_HTTP_URLS became "http"
+    and every URL or timestamp label was cut. This rebuilds both lists from the same strings,
+    splitting at the first colon only. It does nothing outside a multi-arch publish.
+  -->
+  <Target Name="_No2SqlFixColonSplitContainerItems" AfterTargets="_ParseItemsForPublishingSingleContainer">
+    <ItemGroup Condition="@(_ParsedContainerLabel->Count()) > 0">
+      <ContainerLabel Remove="@(ContainerLabel)" />
+      <ContainerLabel Include="$([System.String]::Copy('%(_ParsedContainerLabel.Identity)').Split(':')[0])"
+                      Value="$([System.String]::Copy('%(_ParsedContainerLabel.Identity)').Substring($([System.String]::Copy('%(_ParsedContainerLabel.Identity)').IndexOf(':'))).Substring(1))" />
+    </ItemGroup>
+    <ItemGroup Condition="@(_ParsedContainerEnvironmentVariables->Count()) > 0">
+      <ContainerEnvironmentVariables Remove="@(ContainerEnvironmentVariables)" />
+      <ContainerEnvironmentVariables Include="$([System.String]::Copy('%(_ParsedContainerEnvironmentVariables.Identity)').Split(':')[0])"
+                                     Value="$([System.String]::Copy('%(_ParsedContainerEnvironmentVariables.Identity)').Substring($([System.String]::Copy('%(_ParsedContainerEnvironmentVariables.Identity)').IndexOf(':'))).Substring(1))" />
+    </ItemGroup>
+  </Target>
+
   <!-- Deterministic, source-link-friendly builds in CI -->
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>

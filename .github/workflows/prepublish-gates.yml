@@ -141,3 +141,16 @@ jobs:
         with:
           name: no2sql-packages
           path: artifacts/pack/*.nupkg
+      # P2-8: builds the multi-arch container image into an OCI archive (no Docker, no push) and
+      # checks it: platforms, non-root user, runtime >= 10.0.15, default env intact, no baked-in
+      # secret or --allow-anonymous, MCP name and OCI labels.
+      - name: Container image gate
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          version="$(dotnet msbuild No2SQL/No2SQL.csproj -getProperty:PackageVersion)"
+          version="${version//[$'\r\n ']/}"
+          dotnet publish No2SQL/No2SQL.csproj -c Release -t:PublishContainer -p:No2SqlContainer=true \
+            -p:ContainerArchiveOutputPath="$RUNNER_TEMP/no2sql-image.tar"
+          python3 -I .github/scripts/container_image_gate.py "$RUNNER_TEMP/no2sql-image.tar" \
+            --version "$version" --min-runtime 10.0.15 --require-revision

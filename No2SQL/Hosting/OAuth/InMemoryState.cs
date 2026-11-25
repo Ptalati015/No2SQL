@@ -244,6 +244,8 @@ internal sealed class InteractionStore(TimeProvider clock)
 /// Owner password guessing limits (R14): after 5 failures from one address each attempt waits 2 s, doubling
 /// up to 60 s; after 20 failures in an hour that address is refused without checking; after 100 failures in
 /// an hour from all addresses together, login is refused for everyone until the hour has passed.
+/// An attempt is counted when it starts, before the password is checked, so attempts sent at the same time
+/// are not all judged against the same count; a correct password takes its own attempt back.
 /// </summary>
 internal sealed class LoginThrottle(TimeProvider clock)
 {
@@ -257,37 +259,20 @@ internal sealed class LoginThrottle(TimeProvider clock)
     private const int MaxAddresses = 10_000;
 
     private readonly Dictionary<string, Queue<DateTimeOffset>> _byAddress = new(StringComparer.Ordinal);
-    private readonly Queue<DateTimeOffset> _global = new();
+    private readonly List<DateTimeOffset> _global = [];
     private readonly object _gate = new();
 
-    /// <summary>Whether an attempt from this address is refused outright, and how long to wait before checking it.</summary>
-    public (bool Refused, TimeSpan Delay) Check(string address)
+    /// <summary>
+    /// Starts an attempt from this address: whether it is refused outright, how long to wait before checking
+    /// the password, and the attempt's own mark for <see cref="Succeeded"/>. An attempt that is not refused
+    /// counts as a failure from this moment.
+    /// </summary>
+    public (bool Refused, TimeSpan Delay, DateTimeOffset Attempt) Begin(string address)
     {
         lock (_gate)
         {
             var now = clock.GetUtcNow();
-            Trim(_global, now);
-            var failures = _byAddress.TryGetValue(address, out var queue) ? Trim(queue, now) : 0;
-            if (_global.Count >= MaxFailuresGlobal || failures >= MaxFailuresPerAddress)
-            {
-                return (true, TimeSpan.Zero);
-            }
-
-            if (failures < FreeFailures)
-            {
-                return (false, TimeSpan.Zero);
-            }
-
-            var delay = FirstDelay * Math.Pow(2, failures - FreeFailures);
-            return (false, delay > MaxDelay ? MaxDelay : delay);
-        }
-    }
-
-    public void RecordFailure(string address)
-    {
-        lock (_gate)
-        {
-            var now = clock.GetUtcNow();
+            _global.RemoveAll(t => now - t >= Window);
             if (!_byAddress.TryGetValue(address, out var queue))
             {
                 if (_byAddress.Count >= MaxAddresses)
@@ -301,16 +286,32 @@ internal sealed class LoginThrottle(TimeProvider clock)
                 _byAddress[address] = queue = new Queue<DateTimeOffset>();
             }
 
+            var failures = Trim(queue, now);
+            if (_global.Count >= MaxFailuresGlobal || failures >= MaxFailuresPerAddress)
+            {
+                return (true, TimeSpan.Zero, now);
+            }
+
+            var delay = TimeSpan.Zero;
+            if (failures >= FreeFailures)
+            {
+                delay = FirstDelay * Math.Pow(2, failures - FreeFailures);
+                delay = delay > MaxDelay ? MaxDelay : delay;
+            }
+
             queue.Enqueue(now);
-            _global.Enqueue(now);
+            _global.Add(now);
+            return (false, delay, now);
         }
     }
 
-    public void RecordSuccess(string address)
+    /// <summary>The password was right: forgets this address's failures and takes the attempt out of the total.</summary>
+    public void Succeeded(string address, DateTimeOffset attempt)
     {
         lock (_gate)
         {
             _byAddress.Remove(address);
+            _global.Remove(attempt);
         }
     }
 

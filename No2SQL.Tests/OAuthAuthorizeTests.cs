@@ -340,6 +340,45 @@ public sealed class OAuthAuthorizeTests : IDisposable
     }
 
     [Fact]
+    public async Task Wrong_passwords_sent_all_at_once_are_counted_one_by_one()
+    {
+        var (_, parameters) = await ValidRequestAsync();
+        var page = await LoginPageAsync(parameters);
+
+        // 40 attempts at the same moment: 20 are checked (15 of them after a wait), 20 are refused unchecked.
+        var attempts = Enumerable.Range(0, 40).Select(i => _server.LoginAsync(page, "wrong-password-" + i)).ToList();
+        var all = Task.WhenAll(attempts);
+        for (var waited = 0; !all.IsCompleted && waited < 400; waited++)
+        {
+            _server.Clock.Advance(TimeSpan.FromSeconds(5));
+            await Task.Delay(10, Cancel);
+        }
+
+        var statuses = (await all.WaitAsync(TimeSpan.FromSeconds(10), Cancel)).Select(r => (int)r.StatusCode).ToList();
+        Assert.Equal(20, statuses.Count(status => status == 401));
+        Assert.Equal(20, statuses.Count(status => status == 429));
+        Assert.Equal(20, _server.Logs.Lines.Count(line => line.Contains("Owner login failed from")));
+    }
+
+    [Fact]
+    public async Task A_correct_password_clears_the_count_for_its_address()
+    {
+        var (_, parameters) = await ValidRequestAsync();
+        for (var round = 0; round < 3; round++)
+        {
+            var page = await LoginPageAsync(parameters);
+            for (var i = 0; i < 4; i++)
+            {
+                using var wrong = await _server.LoginAsync(page, "wrong-password");
+                Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+            }
+
+            using var right = await _server.LoginAsync(page, _server.Password);   // the fifth attempt: no wait yet
+            Assert.Equal(HttpStatusCode.OK, right.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task One_hundred_failures_an_hour_from_all_addresses_lock_login_for_everyone()
     {
         var (_, parameters) = await ValidRequestAsync();

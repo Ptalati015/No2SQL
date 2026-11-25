@@ -357,7 +357,7 @@ internal static partial class OAuthServerEndpoints
         }
 
         var ip = ClientIp(context);
-        var (refused, delay) = server.Throttle.Check(ip);
+        var (refused, delay, attempt) = server.Throttle.Begin(ip);
         if (refused)
         {
             server.Log.LogWarning("Owner login from {ClientIp} refused without checking: too many wrong passwords in the last hour.", ip);
@@ -372,13 +372,12 @@ internal static partial class OAuthServerEndpoints
 
         if (!server.Owner.Verify(Single(form, "password")))
         {
-            server.Throttle.RecordFailure(ip);
             server.Log.LogWarning("Owner login failed from {ClientIp}.", ip);
             await WritePage(context, 401, OAuthPages.Login(pending, "That password is not correct."), pending.RedirectUri);
             return;
         }
 
-        server.Throttle.RecordSuccess(ip);
+        server.Throttle.Succeeded(ip, attempt);
         var session = server.Interactions.StartSession();
         pending.SessionId = session;
         context.Response.Headers.Append("Set-Cookie",

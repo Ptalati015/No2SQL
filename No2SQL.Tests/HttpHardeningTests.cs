@@ -160,7 +160,7 @@ public class HttpHardeningTests
     }
 
     [Fact]
-    public async Task An_endpoint_that_sets_its_own_CSP_and_Cache_Control_keeps_them()
+    public async Task An_endpoint_that_sets_its_own_CSP_Referrer_Policy_and_Cache_Control_keeps_them()
     {
         using var app = new No2SqlHttpApp(services => services.AddSingleton<IStartupFilter>(new PageEndpoint()));
         using var client = app.CreateClient();
@@ -170,6 +170,7 @@ public class HttpHardeningTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("default-src 'self'; form-action https://client.example", response.Headers.GetValues("Content-Security-Policy").Single());
         Assert.True(response.Headers.CacheControl is { Private: true, NoStore: false, MaxAge.TotalSeconds: 0 }, "the page's own Cache-Control");
+        Assert.Equal("same-origin", response.Headers.GetValues("Referrer-Policy").Single());
         Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
     }
@@ -511,6 +512,7 @@ public class HttpHardeningTests
             {
                 context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; form-action https://client.example";
                 context.Response.Headers.CacheControl = "private, max-age=0";
+                context.Response.Headers["Referrer-Policy"] = "same-origin";
                 return context.Response.WriteAsync("<html></html>");
             });
         };

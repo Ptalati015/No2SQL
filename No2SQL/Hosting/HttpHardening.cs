@@ -152,10 +152,16 @@ internal static class HttpHardening
     {
         var headers = context.Response.Headers;
         headers.XContentTypeOptions = "nosniff";
-        headers["Referrer-Policy"] = "no-referrer";
         headers.XFrameOptions = "DENY";
 
         // Defaults only: an endpoint that sets its own (P2-5's HTML pages, threat model R18) keeps it.
+        // The sign-in pages need Referrer-Policy: same-origin, because under no-referrer the browser
+        // sends "Origin: null" on their form posts and the Origin check would refuse the owner.
+        if (string.IsNullOrEmpty(headers["Referrer-Policy"]))
+        {
+            headers["Referrer-Policy"] = "no-referrer";
+        }
+
         if (string.IsNullOrEmpty(headers.ContentSecurityPolicy))
         {
             headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";

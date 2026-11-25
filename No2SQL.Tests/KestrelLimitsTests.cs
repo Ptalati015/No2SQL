@@ -74,6 +74,12 @@ public sealed class KestrelLimitsTests : IAsyncDisposable
         using var content = new ByteArrayContent(new byte[2 * 1024 * 1024]);
         using var request = McpPost(content);
 
+        // The 413 comes from the declared Content-Length, before the body is read, and the connection
+        // then closes. Without Expect: 100-continue the client may still be writing the body and get
+        // a broken pipe instead of the response. With it, Kestrel sends 100 Continue only when the
+        // body is first read, so the client gets the 413 and never sends the body (as curl does).
+        request.Headers.ExpectContinue = true;
+
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);

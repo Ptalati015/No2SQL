@@ -29,6 +29,12 @@ internal static class HttpAuth
     /// <summary>Present when the caller may use the tools (the static token, or a JWT with the required scope).</summary>
     public const string ScopeGrantedClaim = "no2sql:scope_granted";
 
+    /// <summary>
+    /// The caller id that audit lines use (P2-7): the identity provider's <c>sub</c>, or for the static
+    /// token "static-token:" and the first 8 hex digits of its SHA-256. Never the token itself.
+    /// </summary>
+    public const string SubjectClaim = "sub";
+
     // Asymmetric algorithms only: "none" and every HMAC algorithm are refused.
     internal static readonly string[] AllowedAlgorithms =
     [
@@ -108,6 +114,9 @@ internal static class HttpAuth
         endpoints.MapGet(HttpAuthOptions.ResourceMetadataPath, metadata);
         endpoints.MapGet("/.well-known/oauth-protected-resource", metadata);
     }
+
+    /// <summary>The <see cref="SubjectClaim"/> of a static-token caller: a fingerprint, not the token.</summary>
+    public static string StaticTokenSubject(byte[] tokenHash) => "static-token:" + Convert.ToHexStringLower(tokenHash.AsSpan(0, 4));
 
     /// <summary>The scopes in a validated JWT: "scope" (space-separated, RFC 9068) or "scp" (string or array).</summary>
     public static IEnumerable<string> GrantedScopes(ClaimsPrincipal principal) =>

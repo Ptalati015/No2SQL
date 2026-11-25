@@ -53,6 +53,17 @@ public sealed class StaticTokenAuthTests : IDisposable
         Assert.Equal("MCP connectivity test successful!", (string?)reply.Result["content"]?[0]?["text"]);
     }
 
+    [Fact]
+    public async Task The_caller_id_for_audit_lines_is_a_fingerprint_of_the_token_never_the_token()
+    {
+        var caller = await AuthProbe.AuthenticateAsync(_app, "Bearer " + _token);
+
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(_token)));
+        Assert.NotNull(caller);
+        Assert.Equal("static-token:" + hash[..8], caller.FindFirst("sub")?.Value);
+        Assert.DoesNotContain(caller.Claims, claim => claim.Value.Contains(_token, StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("bearer")]
     [InlineData("BEARER")]

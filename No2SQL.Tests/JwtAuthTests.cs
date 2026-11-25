@@ -62,6 +62,30 @@ public sealed class JwtAuthTests : IDisposable
     }
 
     [Fact]
+    public async Task The_caller_id_for_audit_lines_is_the_identity_providers_sub()
+    {
+        var caller = await AuthProbe.AuthenticateAsync(_app, "Bearer " + _idp.Token(issuedAt: Now));
+
+        Assert.NotNull(caller);
+        Assert.Equal("owner", caller.FindFirst("sub")?.Value);
+    }
+
+    [Theory]
+    [InlineData("line\nbreak")]
+    [InlineData("")]
+    public async Task A_sub_that_is_empty_or_has_control_characters_is_not_copied(string subject)
+    {
+        var payload = JsonNode.Parse(TestIdentityProvider.GoodPayload(Now))!;
+        payload["sub"] = subject;
+        var token = _idp.SignedWithHeader("""{"alg":"ES256","kid":"ec-1","typ":"at+jwt"}""", payload.ToJsonString());
+
+        var caller = await AuthProbe.AuthenticateAsync(_app, "Bearer " + token);
+
+        Assert.NotNull(caller);
+        Assert.Equal("identity-provider", caller.FindFirst("sub")?.Value);
+    }
+
+    [Fact]
     public async Task No_token_gets_401_pointing_at_the_resource_metadata()
     {
         var reply = await _client.ListToolsAsync(Cancel);

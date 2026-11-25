@@ -30,6 +30,9 @@ internal sealed class BearerAuthenticationHandler(
 
     private readonly ILogger _log = loggerFactory.CreateLogger("No2SQL.Auth");
 
+    // Longest identity-provider "sub" copied onto the caller; anything longer or with control characters is not.
+    private const int MaxSubjectLength = 256;
+
     // Hash of the static token, so the comparison takes the same time whatever the presented length.
     private readonly byte[]? _staticTokenHash = auth.StaticToken is null ? null : SHA256.HashData(Encoding.UTF8.GetBytes(auth.StaticToken));
 
@@ -50,7 +53,11 @@ internal sealed class BearerAuthenticationHandler(
             && CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(token)), _staticTokenHash))
         {
             var identity = new ClaimsIdentity(
-                [new Claim(HttpAuth.CallerClaim, "static-token"), new Claim(HttpAuth.ScopeGrantedClaim, "true")],
+                [
+                    new Claim(HttpAuth.CallerClaim, "static-token"),
+                    new Claim(HttpAuth.SubjectClaim, HttpAuth.StaticTokenSubject(_staticTokenHash)),
+                    new Claim(HttpAuth.ScopeGrantedClaim, "true"),
+                ],
                 Scheme.Name);
             return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
         }
@@ -66,7 +73,12 @@ internal sealed class BearerAuthenticationHandler(
             return Remember(AuthenticateResult.Fail("invalid token"), DescribeJwtFailure(jwt.Failure));
         }
 
-        var claims = new List<Claim> { new(HttpAuth.CallerClaim, "identity-provider") };
+        var subject = jwt.Principal.FindFirst(HttpAuth.SubjectClaim)?.Value;
+        var claims = new List<Claim>
+        {
+            new(HttpAuth.CallerClaim, "identity-provider"),
+            new(HttpAuth.SubjectClaim, IsUsableSubject(subject) ? subject : "identity-provider"),
+        };
         if (HttpAuth.GrantedScopes(jwt.Principal).Contains(auth.Scope, StringComparer.Ordinal))
         {
             claims.Add(new Claim(HttpAuth.ScopeGrantedClaim, "true"));
@@ -183,6 +195,10 @@ internal sealed class BearerAuthenticationHandler(
 
         return true;
     }
+
+    // The identity provider's "sub" goes into audit lines, so only short printable values are kept.
+    private static bool IsUsableSubject([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? subject) =>
+        subject is { Length: > 0 and <= MaxSubjectLength } && !subject.Any(char.IsControl);
 
     // A fixed reason per failure kind. The exception message is never used: it can quote token parts.
     private static string DescribeJwtFailure(Exception? failure) => failure switch

@@ -9,7 +9,7 @@ only on a private Compose network, and it won't start on `0.0.0.0` without auth.
 You need a DNS name that points at this machine, with ports 80 and 443 open to it.
 
 ```sh
-cp .env.example .env                 # set NO2SQL_DOMAIN (and optionally NO2SQL_ALLOWED_DATABASES)
+cp env.example .env                     # set NO2SQL_DOMAIN (and optionally NO2SQL_ALLOWED_DATABASES)
 cp no2sql.env.example no2sql.env     # set NO2SQL_HTTP_TOKEN (openssl rand -base64 48) or the OAuth settings
 chmod 600 .env no2sql.env
 

@@ -26,6 +26,8 @@ services:
       NO2SQL_PUBLIC_URL: "https://${NO2SQL_DOMAIN:?set NO2SQL_DOMAIN in .env}"
       # Only Caddy's fixed address may set X-Forwarded-For.
       NO2SQL_HTTP_TRUSTED_PROXIES: "172.30.87.2/32"
+      # Caddy always serves https and sends X-Forwarded-Proto, so browsers may be told to stay on https.
+      NO2SQL_HTTP_HSTS: "true"
       NO2SQL_MONGO_FILE: /run/secrets/mongo
       # Keep the tools to the databases they need.
       NO2SQL_ALLOWED_DATABASES: "${NO2SQL_ALLOWED_DATABASES:-}"

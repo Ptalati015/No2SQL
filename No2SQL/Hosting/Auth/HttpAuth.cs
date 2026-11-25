@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -67,13 +69,20 @@ internal static class HttpAuth
             return;
         }
 
-        var authentication = services
-            .AddAuthentication(options =>
-            {
-                options.DefaultScheme = Scheme;
-                options.DefaultChallengeScheme = Scheme;
-                options.DefaultForbidScheme = Scheme;
-            })
+        // The parts of services.AddAuthentication() that are used here. That method also registers ASP.NET
+        // Core Data Protection, whose start-up service creates a key ring under the home directory. Nothing
+        // here uses Data Protection, and HTTP mode writes no file of its own, so it is left out; and the
+        // JWT handler gets an empty configuration, so no configuration source can change how tokens are checked.
+        services.AddAuthenticationCore(options =>
+        {
+            options.DefaultScheme = Scheme;
+            options.DefaultChallengeScheme = Scheme;
+            options.DefaultForbidScheme = Scheme;
+        });
+        services.AddWebEncoders();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IAuthenticationConfigurationProvider, NoAuthenticationConfiguration>();
+        var authentication = new AuthenticationBuilder(services)
             .AddScheme<AuthenticationSchemeOptions, BearerAuthenticationHandler>(Scheme, _ => { });
 
         if (auth.HasAuthority)
@@ -312,3 +321,9 @@ internal static class HttpAuth
 
 /// <summary>An access token of the built-in server that was revoked before its expiry.</summary>
 internal sealed class SecurityTokenRevokedException() : SecurityTokenValidationException("The access token was revoked.");
+
+/// <summary>An empty <c>Authentication</c> configuration section: sign-in is configured by the NO2SQL_ variables only.</summary>
+internal sealed class NoAuthenticationConfiguration : IAuthenticationConfigurationProvider
+{
+    public IConfiguration AuthenticationConfiguration { get; } = new ConfigurationBuilder().Build();
+}

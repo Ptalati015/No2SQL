@@ -39,7 +39,8 @@ docker compose up -d
   `NO2SQL_MONGO_FILE` and warns if other users can read it. Compose mounts the file with the host's
   owner and mode, so set them on the host as shown above.
 - **`data/` must belong to UID 1654.** The container's root filesystem is read-only. `/data` is the
-  only writable path, and a directory Docker creates for a bind mount belongs to root.
+  only writable path (the image sets `NO2SQL_DATA_DIR=/data` for the built-in sign-in's state), and
+  a directory Docker creates for a bind mount belongs to root.
 - **`.env`, `no2sql.env`, `secrets/` and `data/` are git-ignored here.** Never commit them.
 - **Port 8080 in `docker inspect`** comes from the .NET base image (`ASPNETCORE_HTTP_PORTS`).
   No2SQL ignores it and listens only on `NO2SQL_HTTP_URLS` (8787 in the image).

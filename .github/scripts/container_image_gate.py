@@ -26,6 +26,7 @@ EXPECTED_ENV = {
     "NO2SQL_TRANSPORT": "http",
     "NO2SQL_HTTP_URLS": "http://0.0.0.0:8787",
     "DOTNET_EnableDiagnostics": "0",
+    "NO2SQL_DATA_DIR": "/data",
 }
 FORBIDDEN_ENV = {"NO2SQL_HTTP_TOKEN", "NO2SQL_OWNER_PASSWORD", "NO2SQL_MONGO", "NO2SQL_MONGO_FILE"}
 MCP_NAME = "io.github.Ptalati015/no2sql"

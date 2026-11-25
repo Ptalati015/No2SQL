@@ -193,6 +193,18 @@ jobs:
             exit 1
           fi
 
+      # The runtime the exe carries comes from the SDK on the runner. Fail before anything is uploaded
+      # if the nuget.org vulnerability feed lists that runtime version (see runtime_vuln_gate.py).
+      - name: Runtime patch-level gate
+        timeout-minutes: 3
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          if [[ "$RID" == win-* ]]; then exe="No2SQL.exe"; else exe="No2SQL"; fi
+          python3 -I .github/scripts/runtime_vuln_gate.py "artifacts/publish/$RID/$exe"
+
       - name: Upload exe
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

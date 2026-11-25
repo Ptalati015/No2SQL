@@ -10,8 +10,11 @@ namespace No2SQL.Hosting;
 /// <item><c>NO2SQL_HTTP_TOKEN</c>: one static bearer token (scripts, the OpenAI Responses API).</item>
 /// <item><c>NO2SQL_OAUTH_AUTHORITY</c> + <c>NO2SQL_PUBLIC_URL</c>: JWT access tokens from an external
 /// identity provider, with protected resource metadata (RFC 9728) for OAuth clients.</item>
+/// <item><c>NO2SQL_OAUTH_BUILTIN=true</c> + <c>NO2SQL_PUBLIC_URL</c>: the built-in single-owner authorization
+/// server (P2-5) issues the JWT access tokens, with <c>NO2SQL_OWNER_PASSWORD</c> (or a generated password)
+/// and its state in <c>NO2SQL_DATA_DIR</c>.</item>
 /// </list>
-/// Both may be set together. With neither, HTTP mode is anonymous, which only a loopback address or
+/// The static token may be combined with either OAuth mode; the two OAuth modes exclude each other. With neither, HTTP mode is anonymous, which only a loopback address or
 /// an explicit <c>--allow-anonymous</c> permits (see <see cref="HttpServer"/>).
 /// </summary>
 internal sealed partial record HttpAuthOptions
@@ -21,9 +24,16 @@ internal sealed partial record HttpAuthOptions
     public const string PublicUrlVariable = "NO2SQL_PUBLIC_URL";
     public const string ScopeVariable = "NO2SQL_OAUTH_SCOPE";
     public const string BuiltinVariable = "NO2SQL_OAUTH_BUILTIN";
+    public const string OwnerPasswordVariable = "NO2SQL_OWNER_PASSWORD";
+    public const string DataDirectoryVariable = "NO2SQL_DATA_DIR";
+    public const string AccessTokenMinutesVariable = "NO2SQL_OAUTH_ACCESS_TOKEN_MINUTES";
 
     public const string DefaultScope = "mcp:tools";
     public const int MinimumTokenLength = 32;
+    public const int MinimumOwnerPasswordLength = 12;
+    public const int DefaultAccessTokenMinutes = 60;
+    public const int MinimumAccessTokenMinutes = 5;
+    public const int MaximumAccessTokenMinutes = 1440;
 
     // Well-known path of the protected resource metadata for the resource <public URL>/mcp (RFC 9728 section 3.1).
     public const string ResourceMetadataPath = "/.well-known/oauth-protected-resource" + HttpServer.McpPath;
@@ -47,18 +57,36 @@ internal sealed partial record HttpAuthOptions
     /// <summary>The scope an access token from the identity provider must carry.</summary>
     public string Scope { get; init; } = DefaultScope;
 
+    /// <summary>True when the built-in authorization server is on (<c>NO2SQL_OAUTH_BUILTIN=true</c>).</summary>
+    public bool Builtin { get; init; }
+
+    /// <summary>The built-in server's data directory: <c>NO2SQL_DATA_DIR</c>, or ~/.no2sql.</summary>
+    public string? DataDirectory { get; init; }
+
+    /// <summary><c>NO2SQL_OWNER_PASSWORD</c>, or null for a generated password.</summary>
+    public string? OwnerPassword { get; init; }
+
+    /// <summary>Lifetime of the built-in server's access tokens.</summary>
+    public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromMinutes(DefaultAccessTokenMinutes);
+
     public bool HasStaticToken => StaticToken is not null;
 
     public bool HasAuthority => Authority is not null;
 
+    /// <summary>True when /mcp accepts JWT access tokens (from an external identity provider or the built-in server).</summary>
+    public bool UsesJwt => HasAuthority || Builtin;
+
+    /// <summary>The issuer of the accepted JWTs: the external authority, or for the built-in server the public URL's origin.</summary>
+    public string? Issuer => Authority ?? (Builtin && PublicUrl is not null ? PublicUrl.GetLeftPart(UriPartial.Authority) : null);
+
     /// <summary>True when /mcp needs a token.</summary>
-    public bool RequiresSignIn => HasStaticToken || HasAuthority;
+    public bool RequiresSignIn => HasStaticToken || UsesJwt;
 
     /// <summary>The MCP endpoint as clients reach it: the token audience and the metadata's <c>resource</c>.</summary>
     public string? McpUrl => PublicUrl is null ? null : PublicUrl.GetLeftPart(UriPartial.Authority) + HttpServer.McpPath;
 
     /// <summary>Where the protected resource metadata is published, or null when there is none to publish.</summary>
-    public string? ResourceMetadataUrl => HasAuthority && PublicUrl is not null
+    public string? ResourceMetadataUrl => UsesJwt && PublicUrl is not null
         ? PublicUrl.GetLeftPart(UriPartial.Authority) + ResourceMetadataPath
         : null;
 
@@ -73,6 +101,14 @@ internal sealed partial record HttpAuthOptions
         var authority = Trimmed(getVariable(AuthorityVariable));
         var publicUrl = Trimmed(getVariable(PublicUrlVariable));
         var scope = Trimmed(getVariable(ScopeVariable));
+        var lifetime = Trimmed(getVariable(AccessTokenMinutesVariable));
+
+        // Not trimmed: spaces may be part of a password. Only an empty or all-blank value counts as unset.
+        var ownerPassword = getVariable(OwnerPasswordVariable);
+        if (string.IsNullOrWhiteSpace(ownerPassword))
+        {
+            ownerPassword = null;
+        }
 
         var builtinOn = false;
         if (builtin is not null)
@@ -94,9 +130,30 @@ internal sealed partial record HttpAuthOptions
             return false;
         }
 
-        if (builtinOn)
+        if (!builtinOn && (ownerPassword is not null || lifetime is not null))
         {
-            error = $"{BuiltinVariable}=true asks for the built-in authorization server, which is not part of this build yet. Use {AuthorityVariable} or {TokenVariable}.";
+            error = $"{(ownerPassword is not null ? OwnerPasswordVariable : AccessTokenMinutesVariable)} only applies together with {BuiltinVariable}=true.";
+            return false;
+        }
+
+        if (ownerPassword is not null && ownerPassword.Length < MinimumOwnerPasswordLength)
+        {
+            error = $"{OwnerPasswordVariable} must be at least {MinimumOwnerPasswordLength} characters. Leave it unset to have a strong password generated at the first start.";
+            return false;
+        }
+
+        var accessTokenMinutes = DefaultAccessTokenMinutes;
+        if (lifetime is not null
+            && (!int.TryParse(lifetime, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out accessTokenMinutes)
+                || accessTokenMinutes is < MinimumAccessTokenMinutes or > MaximumAccessTokenMinutes))
+        {
+            error = $"{AccessTokenMinutesVariable} must be a whole number of minutes from {MinimumAccessTokenMinutes} to {MaximumAccessTokenMinutes}.";
+            return false;
+        }
+
+        string? dataDirectory = null;
+        if (builtinOn && !TryResolveDataDirectory(getVariable, out dataDirectory, out error))
+        {
             return false;
         }
 
@@ -125,6 +182,12 @@ internal sealed partial record HttpAuthOptions
             }
         }
 
+        if (builtinOn && publicUri is null)
+        {
+            error = $"{BuiltinVariable}=true needs {PublicUrlVariable}, the https:// address clients use to reach No2SQL. The sign-in pages and token addresses are published under it.";
+            return false;
+        }
+
         if (scope is not null)
         {
             if (authority is null)
@@ -146,19 +209,57 @@ internal sealed partial record HttpAuthOptions
             Authority = authority,
             PublicUrl = publicUri,
             Scope = scope ?? DefaultScope,
+            Builtin = builtinOn,
+            DataDirectory = dataDirectory,
+            OwnerPassword = ownerPassword,
+            AccessTokenLifetime = TimeSpan.FromMinutes(accessTokenMinutes),
         };
         error = null;
         return true;
     }
 
-    // The compiler-generated ToString would print the static token. This one only says whether it is
-    // set; a property added later is left out until it is added here on purpose.
+    // The compiler-generated ToString would print the static token and the owner password. This one only
+    // says whether they are set; a property added later is left out until it is added here on purpose.
     private bool PrintMembers(StringBuilder builder)
     {
         builder.Append("StaticToken = ").Append(HasStaticToken ? "[set]" : "[unset]")
             .Append(", Authority = ").Append(Authority)
             .Append(", PublicUrl = ").Append(PublicUrl)
-            .Append(", Scope = ").Append(Scope);
+            .Append(", Scope = ").Append(Scope)
+            .Append(", Builtin = ").Append(Builtin)
+            .Append(", DataDirectory = ").Append(DataDirectory)
+            .Append(", OwnerPassword = ").Append(OwnerPassword is null ? "[unset]" : "[set]")
+            .Append(", AccessTokenLifetime = ").Append(AccessTokenLifetime);
+        return true;
+    }
+
+    /// <summary><c>NO2SQL_DATA_DIR</c> (an absolute path), or .no2sql in the home directory.</summary>
+    public static bool TryResolveDataDirectory(Func<string, string?> getVariable, out string? directory, out string? error)
+    {
+        directory = null;
+        var configured = Trimmed(getVariable(DataDirectoryVariable));
+        if (configured is not null)
+        {
+            if (!Path.IsPathFullyQualified(configured))
+            {
+                error = $"{DataDirectoryVariable} must be an absolute path.";
+                return false;
+            }
+
+            directory = configured;
+            error = null;
+            return true;
+        }
+
+        var home = Trimmed(getVariable(OperatingSystem.IsWindows() ? "USERPROFILE" : "HOME"));
+        if (home is null || !Path.IsPathFullyQualified(home))
+        {
+            error = $"There is no home directory for the default data directory. Set {DataDirectoryVariable} to an absolute path.";
+            return false;
+        }
+
+        directory = Path.Combine(home, ".no2sql");
+        error = null;
         return true;
     }
 

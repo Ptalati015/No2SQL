@@ -6,8 +6,11 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using No2SQL.Hosting.OAuth;
 
 namespace No2SQL.Hosting;
 
@@ -47,6 +50,10 @@ internal static class HttpAuth
     // and plain "JWT", which several identity providers still use. Compared case-insensitively (RFC 7515 4.1.9).
     internal static readonly string[] AllowedTypes = ["at+jwt", "application/at+jwt", "JWT"];
 
+    // The built-in server issues only RFC 9068 access tokens, signed ES256 (threat model R22).
+    internal static readonly string[] BuiltinTypes = ["at+jwt", "application/at+jwt"];
+    internal static readonly string[] BuiltinAlgorithms = [SecurityAlgorithms.EcdsaSha256];
+
     internal static readonly TimeSpan ClockSkew = TimeSpan.FromSeconds(60);
 
     // A token signed with an unknown key makes the handler fetch the signing keys again, at most this often.
@@ -72,7 +79,45 @@ internal static class HttpAuth
         if (auth.HasAuthority)
         {
             authentication.AddJwtBearer(JwtScheme, options => ConfigureJwt(options, auth));
+        }
+        else if (auth.Builtin)
+        {
+            authentication.AddJwtBearer(JwtScheme, options => ConfigureBuiltinJwt(options, auth));
+            services.AddNo2SqlOAuthServer(auth);
 
+            // The keys come from the data directory and revoked tokens from the grant store; both notice
+            // changes made by the 'No2SQL oauth' commands within a second (R23).
+            services.AddOptions<JwtBearerOptions>(JwtScheme)
+                .Configure<SigningKeyStore, GrantStore, ILoggerFactory>((options, keys, grants, loggers) =>
+                {
+                    var log = loggers.CreateLogger("No2SQL.OAuth");
+                    options.TokenValidationParameters.IssuerSigningKeyResolver = (_, _, kid, _) => keys.ValidationKeys(kid);
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnTokenValidated = context =>
+                        {
+                            try
+                            {
+                                if (context.SecurityToken is not JsonWebToken token || string.IsNullOrEmpty(token.Id) || grants.IsAccessTokenRevoked(token.Id))
+                                {
+                                    context.Fail(new SecurityTokenRevokedException());
+                                }
+                            }
+                            catch (OAuthDataException ex)
+                            {
+                                // Fail closed: without the list of revoked tokens, no token is accepted.
+                                log.LogError("The revoked tokens could not be read, so every access token is refused: {Reason}", ex.Message);
+                                context.Fail(ex);
+                            }
+
+                            return Task.CompletedTask;
+                        },
+                    };
+                });
+        }
+
+        if (auth.UsesJwt)
+        {
             // The clock for token lifetimes comes from DI, so tests can move it.
             services.AddOptions<JwtBearerOptions>(JwtScheme)
                 .Configure<TimeProvider>((options, clock) => options.TokenValidationParameters.LifetimeValidator =
@@ -85,9 +130,17 @@ internal static class HttpAuth
             .RequireClaim(ScopeGrantedClaim, "true"));
     }
 
-    /// <summary>Publishes the protected resource metadata when an identity provider is configured.</summary>
+    /// <summary>
+    /// Publishes the protected resource metadata when JWTs are accepted, and the built-in authorization
+    /// server's endpoints when it is on.
+    /// </summary>
     public static void MapNo2SqlAuthEndpoints(this IEndpointRouteBuilder endpoints, HttpAuthOptions auth)
     {
+        if (auth.Builtin)
+        {
+            endpoints.MapNo2SqlOAuthServer();
+        }
+
         if (auth.ResourceMetadataUrl is null)
         {
             return;
@@ -97,7 +150,7 @@ internal static class HttpAuth
         var body = JsonSerializer.Serialize(new Dictionary<string, object>
         {
             ["resource"] = auth.McpUrl!,
-            ["authorization_servers"] = new[] { auth.Authority! },
+            ["authorization_servers"] = new[] { auth.Issuer! },
             ["scopes_supported"] = new[] { auth.Scope },
             ["bearer_methods_supported"] = new[] { "header" },
             ["resource_name"] = "No2SQL",
@@ -161,12 +214,49 @@ internal static class HttpAuth
         };
     }
 
+    // The built-in server: same rules as for an external identity provider, but only ES256 and at+jwt, and the
+    // signing keys come from the data directory instead of a metadata document (nothing is fetched).
+    private static void ConfigureBuiltinJwt(JwtBearerOptions options, HttpAuthOptions auth)
+    {
+        options.Configuration = new OpenIdConnectConfiguration { Issuer = auth.Issuer };
+        options.MapInboundClaims = false;
+        options.SaveToken = false;
+        options.IncludeErrorDetails = false;
+
+        var audience = auth.McpUrl!;
+        var issuer = auth.Issuer!;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            IssuerValidator = (tokenIssuer, _, _) => string.Equals(tokenIssuer, issuer, StringComparison.Ordinal)
+                ? tokenIssuer
+                : throw new SecurityTokenInvalidIssuerException("The token issuer is not this server."),
+            ValidateAudience = true,
+            AudienceValidator = (_, token, _) => HasSingleAudience(token, audience),
+            ValidAlgorithms = BuiltinAlgorithms,
+            TypeValidator = (type, _, _) => BuiltinTypes.Contains(type, StringComparer.OrdinalIgnoreCase)
+                ? type
+                : throw new SecurityTokenInvalidTypeException("The token typ is not at+jwt."),
+            ValidateLifetime = true,
+            RequireExpirationTime = true,
+            RequireSignedTokens = true,
+            ValidateIssuerSigningKey = true,
+            ClockSkew = ClockSkew,
+        };
+    }
+
     // exp is required; exp and nbf are checked against the injected clock with ClockSkew either way.
     internal static bool ValidateLifetime(DateTime? notBefore, DateTime? expires, DateTime utcNow)
     {
         if (expires is null)
         {
             throw new SecurityTokenNoExpirationException("The token has no expiry.");
+        }
+
+        // Expiry first, so an expired token is logged as expired even when its nbf is also wrong.
+        if (expires.Value.ToUniversalTime() + ClockSkew < utcNow)
+        {
+            throw new SecurityTokenExpiredException("The token has expired.") { Expires = expires.Value };
         }
 
         if (notBefore is { } nbf && nbf > expires)
@@ -177,11 +267,6 @@ internal static class HttpAuth
         if (notBefore is { } start && start.ToUniversalTime() - ClockSkew > utcNow)
         {
             throw new SecurityTokenNotYetValidException("The token is not valid yet.") { NotBefore = start };
-        }
-
-        if (expires.Value.ToUniversalTime() + ClockSkew < utcNow)
-        {
-            throw new SecurityTokenExpiredException("The token has expired.") { Expires = expires.Value };
         }
 
         return true;
@@ -224,3 +309,6 @@ internal static class HttpAuth
         }
     }
 }
+
+/// <summary>An access token of the built-in server that was revoked before its expiry.</summary>
+internal sealed class SecurityTokenRevokedException() : SecurityTokenValidationException("The access token was revoked.");

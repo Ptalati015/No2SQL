@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
+using No2SQL.Hosting.OAuth;
 
 namespace No2SQL.Hosting;
 
@@ -44,6 +45,26 @@ internal static class HttpServer
         {
             Console.Error.WriteLine($"[No2SQL] {refusal}");
             return ConfigurationError;
+        }
+
+        // The built-in authorization server's data directory, keys and owner password are checked before
+        // anything listens. A generated password is shown here, once, on stderr: before the port is bound,
+        // so a port that fails to bind cannot lose it.
+        OAuthDataDirectory? oauthDirectory = null;
+        OwnerCredential? ownerCredential = null;
+        var oauthWarnings = new List<string>();
+        if (auth.Builtin)
+        {
+            if (OAuthServerSetup.Prepare(auth, TimeProvider.System, out oauthDirectory, out ownerCredential, out var generatedPassword, out oauthWarnings) is { } oauthRefusal)
+            {
+                Console.Error.WriteLine($"[No2SQL] {oauthRefusal}");
+                return ConfigurationError;
+            }
+
+            if (generatedPassword is not null)
+            {
+                Console.Error.WriteLine(OwnerCredential.GeneratedNotice(generatedPassword, oauthDirectory));
+            }
         }
 
         var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
@@ -90,6 +111,12 @@ internal static class HttpServer
             }
         });
 
+        if (oauthDirectory is not null && ownerCredential is not null)
+        {
+            builder.Services.AddSingleton(oauthDirectory);
+            builder.Services.AddSingleton(ownerCredential);
+        }
+
         ConfigureServices(builder.Services, mongoConn, auth);
 
         await using var app = builder.Build();
@@ -122,7 +149,22 @@ internal static class HttpServer
                 methods.Add($"access tokens from {auth.Authority} for {auth.McpUrl} with scope {auth.Scope}");
             }
 
+            if (auth.Builtin)
+            {
+                methods.Add($"access tokens from the built-in sign-in at {auth.Issuer} (data directory {auth.DataDirectory})");
+            }
+
             Console.Out.WriteLine($"[No2SQL] Sign-in required on {McpPath}: {string.Join(", or ", methods)}.");
+
+            foreach (var warning in oauthWarnings)
+            {
+                Console.Out.WriteLine($"[No2SQL] WARNING: {warning}");
+            }
+
+            if (auth.Builtin && auth.PublicUrl is { } publicUrl && publicUrl.IsLoopback)
+            {
+                Console.Out.WriteLine($"[No2SQL] Note: {HttpAuthOptions.PublicUrlVariable} is a loopback address, so only clients on this machine can sign in.");
+            }
         }
         else if (exposed.Count > 0)
         {
@@ -150,15 +192,15 @@ internal static class HttpServer
     {
         if (allowAnonymous && auth.RequiresSignIn)
         {
-            return $"{StartupOptions.AllowAnonymousFlag} cannot be combined with {HttpAuthOptions.TokenVariable} or {HttpAuthOptions.AuthorityVariable}. " +
-                "Remove the flag to require sign-in, or unset both variables to run without it.";
+            return $"{StartupOptions.AllowAnonymousFlag} cannot be combined with {HttpAuthOptions.TokenVariable}, {HttpAuthOptions.AuthorityVariable} or {HttpAuthOptions.BuiltinVariable}. " +
+                "Remove the flag to require sign-in, or unset those variables to run without it.";
         }
 
         var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
         if (exposed.Count > 0 && !auth.RequiresSignIn && !allowAnonymous)
         {
             return $"Refusing to start: {string.Join(", ", exposed)} can be reached from other machines and no sign-in is configured. " +
-                $"Set {HttpAuthOptions.TokenVariable} or {HttpAuthOptions.AuthorityVariable}, listen on a loopback address (the default is {HttpBindings.DefaultUrls}), " +
+                $"Set {HttpAuthOptions.BuiltinVariable}=true, {HttpAuthOptions.TokenVariable} or {HttpAuthOptions.AuthorityVariable}, listen on a loopback address (the default is {HttpBindings.DefaultUrls}), " +
                 $"or pass {StartupOptions.AllowAnonymousFlag} to expose the MongoDB tools to anyone who can reach that address.";
         }
 

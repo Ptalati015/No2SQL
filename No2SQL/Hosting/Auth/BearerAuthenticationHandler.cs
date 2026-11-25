@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
+using No2SQL.Hosting.OAuth;
 
 namespace No2SQL.Hosting;
 
@@ -62,7 +63,7 @@ internal sealed class BearerAuthenticationHandler(
             return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
         }
 
-        if (!auth.HasAuthority)
+        if (!auth.UsesJwt)
         {
             return Remember(AuthenticateResult.Fail("invalid token"), "the token is not NO2SQL_HTTP_TOKEN");
         }
@@ -76,7 +77,7 @@ internal sealed class BearerAuthenticationHandler(
         var subject = jwt.Principal.FindFirst(HttpAuth.SubjectClaim)?.Value;
         var claims = new List<Claim>
         {
-            new(HttpAuth.CallerClaim, "identity-provider"),
+            new(HttpAuth.CallerClaim, auth.Builtin ? "built-in-sign-in" : "identity-provider"),
             new(HttpAuth.SubjectClaim, IsUsableSubject(subject) ? subject : "identity-provider"),
         };
         if (HttpAuth.GrantedScopes(jwt.Principal).Contains(auth.Scope, StringComparer.Ordinal))
@@ -215,6 +216,8 @@ internal sealed class BearerAuthenticationHandler(
         SecurityTokenNoExpirationException => "the access token has no expiry",
         SecurityTokenInvalidLifetimeException => "the access token has an invalid lifetime",
         SecurityTokenMalformedException => "the access token is malformed",
+        SecurityTokenRevokedException => "the access token was revoked",
+        OAuthDataException => "the revoked tokens could not be read from the data directory",
         InvalidOperationException => "the identity provider's metadata or signing keys could not be loaded",
         HttpRequestException or IOException or TaskCanceledException => "the identity provider could not be reached",
         _ => "the access token was rejected (" + failure.GetType().Name + ")",

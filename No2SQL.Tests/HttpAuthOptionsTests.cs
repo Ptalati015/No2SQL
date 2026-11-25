@@ -144,11 +144,128 @@ public class HttpAuthOptionsTests
         Assert.False(off.RequiresSignIn);
     }
 
-    [Fact]
-    public void The_built_in_server_is_not_in_this_build_yet()
+    private static readonly string HomeVariable = OperatingSystem.IsWindows() ? "USERPROFILE" : "HOME";
+    private static readonly string Home = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "no2sql-home"));
+
+    private static Dictionary<string, string> Builtin(params (string Name, string Value)[] more)
     {
-        Assert.False(Parse(new() { ["NO2SQL_OAUTH_BUILTIN"] = "true", ["NO2SQL_PUBLIC_URL"] = "https://mcp.example.com" }, out _, out var error));
-        Assert.Contains("not part of this build yet", error);
+        var variables = new Dictionary<string, string> { ["NO2SQL_OAUTH_BUILTIN"] = "true", ["NO2SQL_PUBLIC_URL"] = "https://mcp.example.com", [HomeVariable] = Home };
+        foreach (var (name, value) in more)
+        {
+            variables[name] = value;
+        }
+
+        return variables;
+    }
+
+    [Fact]
+    public void The_built_in_server_needs_only_the_public_URL()
+    {
+        Assert.True(Parse(Builtin(), out var options, out var error), error);
+        Assert.True(options.Builtin && options.UsesJwt && options.RequiresSignIn);
+        Assert.False(options.HasAuthority);
+        Assert.Equal("https://mcp.example.com", options.Issuer);
+        Assert.Equal("https://mcp.example.com/mcp", options.McpUrl);
+        Assert.Equal("https://mcp.example.com/.well-known/oauth-protected-resource/mcp", options.ResourceMetadataUrl);
+        Assert.Equal(Path.Combine(Home, ".no2sql"), options.DataDirectory);
+        Assert.Null(options.OwnerPassword);
+        Assert.Equal(TimeSpan.FromMinutes(60), options.AccessTokenLifetime);
+    }
+
+    [Fact]
+    public void The_built_in_server_without_a_public_URL_is_refused()
+    {
+        var variables = Builtin();
+        variables.Remove("NO2SQL_PUBLIC_URL");
+        Assert.False(Parse(variables, out _, out var error));
+        Assert.Contains("needs NO2SQL_PUBLIC_URL", error);
+    }
+
+    [Fact]
+    public void The_built_in_server_on_a_plain_http_public_URL_is_refused_unless_loopback()
+    {
+        Assert.False(Parse(Builtin(("NO2SQL_PUBLIC_URL", "http://mcp.example.com")), out _, out var error));
+        Assert.Contains("must use https://", error);
+        Assert.True(Parse(Builtin(("NO2SQL_PUBLIC_URL", "http://localhost:8787")), out var local, out _));
+        Assert.Equal("http://localhost:8787", local.Issuer);
+    }
+
+    [Fact]
+    public void The_static_token_may_be_combined_with_the_built_in_server()
+    {
+        Assert.True(Parse(Builtin(("NO2SQL_HTTP_TOKEN", GoodToken)), out var options, out _));
+        Assert.True(options.HasStaticToken && options.Builtin);
+    }
+
+    [Theory]
+    [InlineData("short-pass1")]      // 11 characters
+    [InlineData("12345678901")]
+    public void An_owner_password_shorter_than_12_characters_is_refused(string password)
+    {
+        Assert.False(Parse(Builtin(("NO2SQL_OWNER_PASSWORD", password)), out _, out var error));
+        Assert.Equal("NO2SQL_OWNER_PASSWORD must be at least 12 characters. Leave it unset to have a strong password generated at the first start.", error);
+        Assert.DoesNotContain(password, error);
+    }
+
+    [Fact]
+    public void An_owner_password_is_kept_exactly_and_never_printed()
+    {
+        var password = " correct horse battery staple ";
+        Assert.True(Parse(Builtin(("NO2SQL_OWNER_PASSWORD", password)), out var options, out _));
+        Assert.Equal(password, options.OwnerPassword);
+        Assert.Contains("OwnerPassword = [set]", options.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("horse", options.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("NO2SQL_OWNER_PASSWORD", "a-long-enough-password")]
+    [InlineData("NO2SQL_OAUTH_ACCESS_TOKEN_MINUTES", "30")]
+    public void Built_in_settings_without_the_built_in_server_are_refused(string name, string value)
+    {
+        Assert.False(Parse(new() { [name] = value }, out _, out var error));
+        Assert.Equal($"{name} only applies together with NO2SQL_OAUTH_BUILTIN=true.", error);
+    }
+
+    [Theory]
+    [InlineData("4")]
+    [InlineData("1441")]
+    [InlineData("-5")]
+    [InlineData("60m")]
+    [InlineData("1e2")]
+    public void The_access_token_lifetime_must_be_5_to_1440_minutes(string value)
+    {
+        Assert.False(Parse(Builtin(("NO2SQL_OAUTH_ACCESS_TOKEN_MINUTES", value)), out _, out var error));
+        Assert.Contains("from 5 to 1440", error);
+    }
+
+    [Fact]
+    public void The_access_token_lifetime_can_be_set()
+    {
+        Assert.True(Parse(Builtin(("NO2SQL_OAUTH_ACCESS_TOKEN_MINUTES", "1440")), out var options, out _));
+        Assert.Equal(TimeSpan.FromDays(1), options.AccessTokenLifetime);
+    }
+
+    [Fact]
+    public void The_data_directory_must_be_absolute_and_has_a_default_only_with_a_home_directory()
+    {
+        Assert.True(Parse(Builtin(("NO2SQL_DATA_DIR", Path.Combine(Home, "state"))), out var options, out _));
+        Assert.Equal(Path.Combine(Home, "state"), options.DataDirectory);
+
+        Assert.False(Parse(Builtin(("NO2SQL_DATA_DIR", "relative/dir")), out _, out var relative));
+        Assert.Equal("NO2SQL_DATA_DIR must be an absolute path.", relative);
+
+        var noHome = Builtin();
+        noHome.Remove(HomeVariable);
+        Assert.False(Parse(noHome, out _, out var missing));
+        Assert.Contains("Set NO2SQL_DATA_DIR", missing);
+    }
+
+    [Fact]
+    public void A_data_directory_without_the_built_in_server_is_ignored()
+    {
+        // The Docker image sets NO2SQL_DATA_DIR for every deployment, including token-only ones.
+        Assert.True(Parse(new() { ["NO2SQL_DATA_DIR"] = "/data", ["NO2SQL_HTTP_TOKEN"] = GoodToken }, out var options, out _));
+        Assert.Null(options.DataDirectory);
     }
 
     [Fact]
@@ -181,5 +298,16 @@ public class HttpAuthOptionsTests
         {
             Assert.Contains(refusal, result);
         }
+    }
+
+    [Fact]
+    public void The_built_in_server_counts_as_sign_in_for_the_start_up_rules()
+    {
+        Assert.True(HttpBindings.TryParse("http://0.0.0.0:8787", out var bindings, out _));
+        Assert.True(Parse(Builtin(), out var builtin, out _));
+
+        Assert.Null(HttpServer.StartupRefusal(bindings, builtin, allowAnonymous: false));
+        Assert.Contains("cannot be combined", HttpServer.StartupRefusal(bindings, builtin, allowAnonymous: true));
+        Assert.Contains("NO2SQL_OAUTH_BUILTIN=true", HttpServer.StartupRefusal(bindings, HttpAuthOptions.None, allowAnonymous: false));
     }
 }

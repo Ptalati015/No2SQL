@@ -210,6 +210,18 @@ public sealed class JwtAuthTests : IDisposable
         AssertInvalidToken(reply);
     }
 
+    [Fact]
+    public async Task An_expired_token_is_logged_as_expired_even_when_its_nbf_is_after_its_exp()
+    {
+        var payload = JsonNode.Parse(TestIdentityProvider.GoodPayload(Now))!;
+        payload["nbf"] = new DateTimeOffset(Now).ToUnixTimeSeconds();
+        payload["exp"] = new DateTimeOffset(Now.AddSeconds(-61)).ToUnixTimeSeconds();
+        var token = _idp.SignedWithHeader("""{"alg":"ES256","kid":"ec-1","typ":"at+jwt"}""", payload.ToJsonString());
+
+        AssertInvalidToken(await CallAsync(token));
+        Assert.Contains(_logs.Lines, line => line.Contains("the access token has expired"));
+    }
+
     // A good token whose "aud" is exactly this JSON value.
     private string TokenWithAudience(JsonNode? audience)
     {

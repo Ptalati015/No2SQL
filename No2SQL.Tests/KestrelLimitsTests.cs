@@ -58,14 +58,30 @@ public sealed class KestrelLimitsTests : IAsyncDisposable
     [Fact]
     public async Task A_chunked_body_over_the_limit_gets_413()
     {
-        var body = new MemoryStream(new byte[2 * 1024 * 1024]);
-        using var content = new StreamContent(body);   // no Content-Length: sent chunked
+        // One byte over, so the server has read almost all of it before answering: a bigger body
+        // would leave the client still writing when the connection closes (a broken pipe on CI).
+        var body = new MemoryStream(new byte[1024 * 1024 + 1]);
+        using var content = new StreamContent(body, bufferSize: 1024);   // no Content-Length: sent chunked
         using var request = McpPost(content);
         request.Headers.TransferEncodingChunked = true;
 
         using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_chunked_body_of_exactly_the_limit_is_not_refused()
+    {
+        // Small chunks, so the chunk framing adds a few kilobytes on the wire. Only the body counts.
+        var body = new MemoryStream(new byte[1024 * 1024]);
+        using var content = new StreamContent(body, bufferSize: 1024);
+        using var request = McpPost(content);
+        request.Headers.TransferEncodingChunked = true;
+
+        using var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
 
     [Fact]

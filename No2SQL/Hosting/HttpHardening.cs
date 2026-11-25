@@ -265,9 +265,12 @@ internal static class HttpHardening
 
         if (request.ContentLength is null)
         {
+            // Kestrel counts the chunk framing against its limit, so a body of exactly maxBody sent in
+            // small chunks would be refused. The buffer limit below counts only the body and is the
+            // exact check; Kestrel's limit stays as a backstop on the bytes read, at twice the size.
             if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodySize)
             {
-                bodySize.MaxRequestBodySize = maxBody;
+                bodySize.MaxRequestBodySize = 2 * maxBody;
             }
 
             var inMemory = (int)Math.Min(maxBody, int.MaxValue);

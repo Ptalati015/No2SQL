@@ -17,24 +17,30 @@ internal sealed class McpGuardrails
     public bool BlockSystemDatabases { get; }
 
     public McpGuardrails()
+        : this(ReadBoolEnv("NO2SQL_BLOCK_SYSTEM_DATABASES", defaultValue: true), ParseCsvEnv("NO2SQL_ALLOWED_DATABASES"))
     {
-        BlockSystemDatabases = ReadBoolEnv("NO2SQL_BLOCK_SYSTEM_DATABASES", defaultValue: true);
+    }
 
-        _allowedDatabases = ParseCsvEnv("NO2SQL_ALLOWED_DATABASES");
+    /// <summary>For tests: the policy without reading the environment.</summary>
+    internal McpGuardrails(bool blockSystemDatabases, IEnumerable<string> allowedDatabases)
+    {
+        BlockSystemDatabases = blockSystemDatabases;
+        _allowedDatabases = new HashSet<string>(allowedDatabases, StringComparer.OrdinalIgnoreCase);
     }
 
     public string ValidateDatabaseName(string? databaseName)
     {
         var normalized = ValidateIdentifier(databaseName, "databaseName", 128);
 
+        // Fixed order, so the same name always gets the same answer: the system block, then the allow-list.
         if (BlockSystemDatabases && _blockedSystemDatabases.Contains(normalized))
         {
-            throw new ArgumentException($"Database '{normalized}' is blocked by policy.", nameof(databaseName));
+            throw DatabasePolicyException.SystemDatabase(normalized);
         }
 
         if (_allowedDatabases.Count > 0 && !_allowedDatabases.Contains(normalized))
         {
-            throw new ArgumentException($"Database '{normalized}' is not in NO2SQL_ALLOWED_DATABASES.", nameof(databaseName));
+            throw DatabasePolicyException.NotAllowed(normalized);
         }
 
         return normalized;

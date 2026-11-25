@@ -429,8 +429,15 @@ internal class SchemaTools
         // A MongoConfigurationException message can quote the connection string, so only its type is logged.
         var detail = HasMongoConfigurationException(ex) ? "(message withheld)" : ex.Message;
 
+        // A policy refusal keeps the stderr line it had before it got its own type.
+        var typeName = ex is DatabasePolicyException ? nameof(ArgumentException) : ex.GetType().Name;
         Console.Error.WriteLine(
-            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {ex.GetType().Name}: {detail}");
+            $"[MCP:{errorId}] {operation}{subjectSuffix} failed. {typeName}: {detail}");
+
+        if (ex is DatabasePolicyException refused)
+        {
+            return $"{refused.ClientMessage} (error id {errorId})";
+        }
 
         return $"Unable to complete {operation}{subjectSuffix}. See server logs with error id {errorId}.";
     }

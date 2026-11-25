@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
+using No2SQL.Security;
 
 namespace No2SQL.Hosting;
 
@@ -49,10 +50,18 @@ internal static class HttpServer
         // to the MCP protocol, so logs go to stderr there). The code shared with stdio writes its notices
         // and error ids with Console.Error, so that is pointed at stdout as well: one stream, in order.
         // Only a failed start-up (the refusals above, or a port that cannot be bound) is reported on stderr.
+        // Both streams mask every secret this process knows (the connection string and its password,
+        // the HTTP token, the owner password), exception text included. See SecretRedactor.
+        RedactingTextWriter.InstallOnConsole(SecretRedactor.Process, includeStdout: true);
+        SecretRedactor.Process.AddSecretVariables(Environment.GetEnvironmentVariable);
         var stderr = Console.Error;
         Console.SetError(Console.Out);
 
-        var mongoConn = No2SqlServices.ReadMongoConnectionString();
+        if (!No2SqlServices.TryReadMongoConnectionString(out var mongoConn, out var mongoError))
+        {
+            stderr.WriteLine($"[No2SQL] {mongoError}");
+            return ConfigurationError;
+        }
 
         // An empty builder on purpose: no appsettings.json, no ASPNETCORE_* or DOTNET_* variables and
         // no command-line configuration. The listen addresses come from NO2SQL_HTTP_URLS only, so the
@@ -61,7 +70,15 @@ internal static class HttpServer
 
         // ASP.NET Core's own categories are limited to warnings so request lines (path and query
         // string) are not logged. The level cannot be lowered from outside: there is no configuration source.
-        builder.Logging.AddConsole();
+        // One line per entry with a UTC timestamp, the shape container log collectors expect. There is no
+        // request or body logging (no UseHttpLogging), so Authorization, Cookie and Set-Cookie are never
+        // logged; the audit line per tool call (ToolCallAudit) is the record of what was asked.
+        builder.Logging.AddSimpleConsole(console =>
+        {
+            console.SingleLine = true;
+            console.UseUtcTimestamp = true;
+            console.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+        });
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
         builder.WebHost.UseKestrelCore().ConfigureKestrel(kestrel =>

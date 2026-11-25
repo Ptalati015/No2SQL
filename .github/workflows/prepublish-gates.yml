@@ -34,6 +34,13 @@ jobs:
       - name: Build Release
         run: dotnet build No2SQL.sln -c Release --no-restore
 
+      # xUnit tests (No2SQL.Tests): HTTP mode on an in-memory server (health check, MCP endpoint,
+      # routes, a real SDK client), start-up options, listen-address checks, tool cancellation and
+      # the injectable clock. No port and no MongoDB needed.
+      - name: Unit and HTTP tests
+        timeout-minutes: 5
+        run: dotnet test No2SQL.sln -c Release --no-build
+
       # Starts the built server over stdio with no MongoDB and checks initialize + tools/list,
       # error handling, clean exit and that no environment values leak into its output.
       # --require-annotations: every tool must carry the MCP-3 annotations.

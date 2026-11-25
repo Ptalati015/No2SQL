@@ -1,3 +1,8 @@
 # False positive: the MCP smoke test generated a random throwaway Mongo password per run
 # (secrets.token_hex), not a real secret. The line was reworded in the next commit.
 d312961b789b298dc8b8fe7e748e5e179870cb50:.github/scripts/mcp_smoke_test.py:generic-api-key:237
+
+# False positive: a made-up wrong password that a test types into the login form, to check that
+# a failed login is never logged with what was typed. It is not a credential for anything. The
+# constant was renamed in a later commit so the rule no longer matches the line.
+806fa9a95438c287600676c0c413dc3627263474:No2SQL.Tests/OAuthTokenTests.cs:generic-api-key:654

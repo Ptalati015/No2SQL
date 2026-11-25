@@ -651,8 +651,8 @@ public sealed class OAuthTokenTests : IDisposable
         var (verifier, challenge) = BuiltinAuthServer.NewPkce();
         using var authorize = await server.AuthorizeAsync(BuiltinAuthServer.AuthorizeParameters(clientId, "https://client.example.test/callback", challenge));
         var loginPage = await authorize.Content.ReadAsStringAsync(Cancel);
-        const string wrongPassword = "Wrong-Guess-51c2e8";
-        using var failedLogin = await server.LoginAsync(loginPage, wrongPassword);
+        const string wrongGuess = "Wrong-Guess-51c2e8";   // typed into the login form on purpose; it is nobody's password
+        using var failedLogin = await server.LoginAsync(loginPage, wrongGuess);
         using var login = await server.LoginAsync(loginPage, server.Password);
         var cookie = BuiltinAuthServer.SessionCookie(login);
         var consentPage = await login.Content.ReadAsStringAsync(Cancel);
@@ -672,7 +672,7 @@ public sealed class OAuthTokenTests : IDisposable
         var secrets = new Dictionary<string, string>
         {
             ["the owner password"] = server.Password!,
-            ["the wrong password"] = wrongPassword,
+            ["the wrong password"] = wrongGuess,
             ["the authorization code"] = flow.Code,
             ["the code verifier"] = verifier,
             ["the first access token"] = accessToken,

@@ -86,6 +86,8 @@
     <!-- No debugger, profiler or EventPipe IPC: nothing to attach to, and no files in /tmp, so a
          read-only root filesystem works without a tmpfs. -->
     <ContainerEnvironmentVariable Include="DOTNET_EnableDiagnostics" Value="0" />
+    <!-- The built-in sign-in's state (P2-5) goes to the one writable path, the /data volume. -->
+    <ContainerEnvironmentVariable Include="NO2SQL_DATA_DIR" Value="/data" />
     <ContainerLabel Include="io.modelcontextprotocol.server.name" Value="io.github.Ptalati015/no2sql" />
   </ItemGroup>
 

@@ -14,7 +14,8 @@ cp no2sql.env.example no2sql.env     # set NO2SQL_HTTP_TOKEN (openssl rand -base
 chmod 600 .env no2sql.env
 
 mkdir -p secrets data
-printf '%s' 'mongodb://readonly-user:...@mongo.example.com/' > secrets/mongo.txt
+# Type or paste the connection string at the prompt, so it stays out of your shell history.
+IFS= read -rs -p 'MongoDB connection string: ' conn && printf '%s' "$conn" > secrets/mongo.txt && unset conn; echo
 sudo chown 1654:1654 secrets/mongo.txt data      # 1654 is the image's non-root "app" user
 sudo chmod 0400 secrets/mongo.txt
 sudo chmod 0700 data

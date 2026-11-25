@@ -9,7 +9,7 @@ No2SQL is an MCP server that helps you move from MongoDB to SQL. It lets your AI
 - generate SQL seed (INSERT) statements,
 - draw ER diagrams in Mermaid, PlantUML and GraphViz DOT.
 
-It works with any AI client that runs local MCP servers, including Claude Desktop, Claude Code, VS Code, Cursor, Windsurf, OpenAI Codex CLI and the OpenAI Agents SDK.
+It works with any AI client that runs local MCP servers, including Claude Desktop, Claude Code, VS Code, Cursor, Windsurf, OpenAI Codex CLI and the OpenAI Agents SDK. For ChatGPT, claude.ai and the OpenAI Responses API, you can host it yourself in [remote mode](https://github.com/Ptalati015/No2SQL/blob/main/docs/remote-mode.md).
 
 ## Install
 
@@ -80,10 +80,11 @@ No2SQL reads these environment variables. Set them in your MCP client's `env` co
 | Variable | Required | What it does |
 |---|---|---|
 | `NO2SQL_MONGO` | Yes | MongoDB connection string, for example `mongodb+srv://<user>:<password>@<cluster-host>/`. It contains credentials, so treat it as a secret. |
+| `NO2SQL_MONGO_FILE` | No | Path to a file that holds the connection string instead, such as a Docker or Kubernetes secret. If both are set, the file wins. |
 | `NO2SQL_ALLOWED_DATABASES` | Recommended | Comma-separated list of the databases No2SQL may read, for example `sales,inventory`. If it is empty, every database is readable except the system ones. |
 | `NO2SQL_BLOCK_SYSTEM_DATABASES` | No | Defaults to `true`, which blocks `admin`, `config` and `local` and hides them from `list_databases`, even if they are in `NO2SQL_ALLOWED_DATABASES`. Leave it on. |
 
-Without `NO2SQL_MONGO` the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that `NO2SQL_MONGO` is not set, and if the value isn't a valid MongoDB connection string, the error says that instead. Fix it in your client's `env` config and restart the server.
+Without a connection string the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that no MongoDB connection string is set, and if the value isn't a valid MongoDB connection string, the error says that instead. Set or correct `NO2SQL_MONGO` (or the file that `NO2SQL_MONGO_FILE` points to) where the server runs, then restart the server. For a local server, that is your client's `env` config. For a remote server, it is the server's own environment.
 
 ## Set up your AI client
 
@@ -262,9 +263,15 @@ async def main():
 asyncio.run(main())
 ```
 
-### Not supported yet
+### ChatGPT, claude.ai and the OpenAI Responses API (remote mode)
 
-ChatGPT, claude.ai on the web and mobile, and the hosted Claude and OpenAI APIs (the Responses API `mcp` tool and the Claude API MCP connector) can only reach remote MCP servers over HTTPS. No2SQL runs locally over stdio for now. Remote mode is planned for a later release.
+These clients run in the cloud and can only reach an MCP server over HTTPS. Since 1.2.0, No2SQL has a remote mode: you run it as an HTTP server next to your database, behind TLS, with sign-in turned on. The [remote mode guide](https://github.com/Ptalati015/No2SQL/blob/main/docs/remote-mode.md) covers:
+
+- running it with Docker and Compose behind Caddy, or through a tunnel for testing,
+- choosing a sign-in: a bearer token for the Responses API, or the built-in sign-in or your own identity provider for ChatGPT and claude.ai,
+- adding it in ChatGPT, in claude.ai (**Settings → Connectors → Add custom connector**) and in the Responses API (`server_url` and `authorization`), with each plan's limits.
+
+Use a read-only MongoDB user and set `NO2SQL_ALLOWED_DATABASES` on any server other people or services can reach. The Claude API MCP connector hasn't been tested with No2SQL yet.
 
 ## Try it
 
@@ -278,7 +285,7 @@ Generate a Mermaid ERD for mydb.
 Generate SQL INSERT statements for the orders collection in mydb.
 ```
 
-If a tool answers that `NO2SQL_MONGO` is not set, add it to the `env` block of your client config and restart the client. `test_connectivity` works without it, so it only shows that the server is running.
+If a tool answers that no MongoDB connection string is set, add `NO2SQL_MONGO` to the `env` block of your client config and restart the client. `test_connectivity` works without it, so it only shows that the server is running.
 
 ## MCP tools
 
@@ -301,7 +308,7 @@ All tools only read from MongoDB. Each one carries MCP tool annotations that mar
 
 No2SQL validates every tool input: identifier format and length, `source` values, relationship override fields and prompt-injection marker patterns.
 
-A failed tool call comes back as an MCP error (`isError: true`), so your client can tell a failure from a result. Error text never includes the connection string or a stack trace. A missing or invalid `NO2SQL_MONGO` gets a fixed message naming the variable, and any other failure gets a short reason with an error id, while the details go to the server log.
+A failed tool call comes back as an MCP error (`isError: true`), so your client can tell a failure from a result. Error text never includes the connection string or a stack trace. A missing `NO2SQL_MONGO` gets a fixed message naming the variable. An invalid one gets a message naming the variable plus an error id, and any other failure gets a short reason with an error id, while the details go to the server log.
 
 Recommended baseline:
 

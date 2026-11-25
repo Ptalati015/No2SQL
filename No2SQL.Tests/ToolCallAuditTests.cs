@@ -98,9 +98,10 @@ public class ToolCallAuditTests
     [Fact]
     public async Task Headers_other_arguments_and_the_connection_string_appear_in_no_log_or_response()
     {
-        const string token = "bearer-canary-0f9e8d7c";
-        const string cookie = "cookie-canary-6b5a4c3d";
-        const string argument = "argument-canary-2e1f0a9b";
+        // Random per run and built at runtime, so no secret-looking literal sits in the source.
+        var token = Canary("bearer");
+        var cookie = Canary("cookie");
+        var argument = Canary("argument");
         var (app, logs) = CreateApp(mongoConnectionString: UnreachableMongo);
         using var _ = app;
         using var client = app.CreateClient();
@@ -145,6 +146,8 @@ public class ToolCallAuditTests
             Assert.All(responses, r => Assert.DoesNotContain(secret, r));
         }
     }
+
+    private static string Canary(string name) => $"{name}-canary-{Guid.NewGuid():N}";
 
     // Stands in for the authentication of P2-4/P2-5: every request arrives signed in as one user.
     private sealed class SignInAs(string subject) : IStartupFilter

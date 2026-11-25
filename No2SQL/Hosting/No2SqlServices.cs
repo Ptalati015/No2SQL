@@ -28,6 +28,11 @@ internal static class No2SqlServices
     // A connection string is short; anything bigger is the wrong file (or a device that never ends).
     internal const int MaxMongoFileChars = 64 * 1024;
 
+    // Opening a FIFO with no writer (or a device that never answers) blocks forever. The file is read
+    // on a worker thread and start-up is refused if it does not finish in time; a FIFO with a writer,
+    // such as bash process substitution NO2SQL_MONGO_FILE=<(pass show mongo), still works.
+    internal static readonly TimeSpan MongoFileTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Reads the MongoDB connection string from NO2SQL_MONGO_FILE when it is set, otherwise from
     /// NO2SQL_MONGO, and registers it with <see cref="SecretRedactor.Process"/> so it is masked in every
@@ -44,7 +49,8 @@ internal static class No2SqlServices
         TextWriter notices,
         SecretRedactor redactor,
         out string? connectionString,
-        out string? error)
+        out string? error,
+        TimeSpan? fileTimeout = null)
     {
         connectionString = null;
         error = null;
@@ -65,8 +71,18 @@ internal static class No2SqlServices
             return true;
         }
 
-        if (!TryReadSecretFile(path, out var fromFile, out var fileWarning, out error))
+        var read = Task.Run(() => (Ok: TryReadSecretFile(path, out var contents, out var warning, out var readError), contents, warning, readError));
+        if (!read.Wait(fileTimeout ?? MongoFileTimeout))
         {
+            error = $"{MongoFileVariable} is set, but {path} could not be read within {(fileTimeout ?? MongoFileTimeout).TotalSeconds:0.#} s. " +
+                "Point it at a regular file (a named pipe with no writer never delivers anything).";
+            return false;
+        }
+
+        var (ok, fromFile, fileWarning, fileError) = read.Result;
+        if (!ok)
+        {
+            error = fileError;
             return false;
         }
 

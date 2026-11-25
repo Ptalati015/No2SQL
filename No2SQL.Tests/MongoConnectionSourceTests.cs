@@ -16,8 +16,17 @@ public sealed class MongoConnectionSourceTests : IDisposable
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
-    private bool Read(out string? connectionString, out string? error) =>
-        No2SqlServices.TryReadMongoConnectionString(name => _variables.GetValueOrDefault(name), _notices, _redactor, out connectionString, out error);
+    private bool Read(out string? connectionString, out string? error, TimeSpan? fileTimeout = null) =>
+        No2SqlServices.TryReadMongoConnectionString(name => _variables.GetValueOrDefault(name), _notices, _redactor, out connectionString, out error, fileTimeout);
+
+    private string MakeFifo()
+    {
+        var path = Path.Combine(_directory, "pipe");
+        using var mkfifo = System.Diagnostics.Process.Start("mkfifo", path);
+        mkfifo.WaitForExit();
+        Assert.Equal(0, mkfifo.ExitCode);
+        return path;
+    }
 
     private string WriteSecretFile(string contents, UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite)
     {
@@ -131,6 +140,40 @@ public sealed class MongoConnectionSourceTests : IDisposable
         Assert.False(Read(out _, out var error));
 
         Assert.Equal($"NO2SQL_MONGO_FILE ({path}) is larger than 64 KiB; it should hold only the MongoDB connection string.", error);
+    }
+
+    [Fact]
+    public void A_named_pipe_with_no_writer_refuses_to_start_instead_of_hanging()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "named pipes as files are Unix only");
+        var path = MakeFifo();
+        _variables["NO2SQL_MONGO_FILE"] = path;
+        var started = DateTime.UtcNow;
+
+        Assert.False(Read(out var connectionString, out var error, TimeSpan.FromMilliseconds(500)));
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3));
+        Assert.Null(connectionString);
+        Assert.Equal(
+            $"NO2SQL_MONGO_FILE is set, but {path} could not be read within 0.5 s. Point it at a regular file (a named pipe with no writer never delivers anything).",
+            error);
+
+        // Release the blocked reader so the worker thread ends.
+        using var writer = new FileStream(path, FileMode.Open, FileAccess.Write);
+    }
+
+    [Fact]
+    public void A_named_pipe_with_a_writer_works_like_process_substitution()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "named pipes as files are Unix only");
+        var path = MakeFifo();
+        _variables["NO2SQL_MONGO_FILE"] = path;
+        var writer = Task.Run(() => File.WriteAllText(path, FromFile + "\n"), TestContext.Current.CancellationToken);
+
+        Assert.True(Read(out var connectionString, out var error, TimeSpan.FromSeconds(5)), error);
+
+        Assert.Equal(FromFile, connectionString);
+        writer.Wait(TestContext.Current.CancellationToken);
     }
 
     [Fact]

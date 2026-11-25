@@ -51,14 +51,19 @@ jobs:
 
       # server.json must validate against its own $schema, and both READMEs must carry
       # the exact "mcp-name: <server.json name>" marker the MCP Registry checks.
+      # P2-9: the server version, the NuGet entry and the OCI image tag must all equal the csproj
+      # PackageVersion, and the OCI entry must run the image as a stdio server.
       - name: Registry metadata gate
         timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
+          version="$(dotnet msbuild No2SQL/No2SQL.csproj -getProperty:PackageVersion)"
+          repository="$(dotnet msbuild No2SQL/No2SQL.csproj -getProperty:ContainerRepository)"
           python3 -I -m venv "$RUNNER_TEMP/gate-venv"
           "$RUNNER_TEMP/gate-venv/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r .github/scripts/gate-requirements.txt
-          "$RUNNER_TEMP/gate-venv/bin/python" -I .github/scripts/check_registry_metadata.py
+          "$RUNNER_TEMP/gate-venv/bin/python" -I .github/scripts/check_registry_metadata.py \
+            --package-version "${version//[$'\r\n ']/}" --container-repository "${repository//[$'\r\n ']/}"
 
       - name: Scan vulnerable packages
         shell: bash

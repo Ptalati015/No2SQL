@@ -110,6 +110,21 @@ public class HttpHardeningOptionsTests
         Assert.True(options.Hsts);
     }
 
+    [Fact]
+    public void The_public_URL_is_accepted_even_with_explicit_lists()
+    {
+        var options = Parse(null, new()
+        {
+            ["NO2SQL_PUBLIC_URL"] = "https://no2sql.example.com",
+            ["NO2SQL_HTTP_ALLOWED_HOSTS"] = "other.example",
+            ["NO2SQL_HTTP_ALLOWED_ORIGINS"] = "https://other.example",
+        });
+
+        Assert.Equal(["other.example", "no2sql.example.com"], options.AllowedHosts);
+        Assert.True(options.IsAllowedOrigin("https://no2sql.example.com"));
+        Assert.True(options.IsAllowedOrigin("https://other.example"));
+    }
+
     // 13
     [Theory]
     [InlineData("*")]

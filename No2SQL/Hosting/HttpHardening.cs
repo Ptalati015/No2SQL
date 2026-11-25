@@ -29,6 +29,10 @@ internal static class HttpHardening
     // OAuth endpoints arrive with P2-5; the checks and limits for them are already in place.
     private static readonly string[] OAuthPaths = ["/authorize", "/login", "/consent", "/token", "/register", "/revoke"];
 
+    // POST bodies that are HTML forms or form-encoded by their RFC (6749 token, 7009 revoke).
+    // /mcp and /register (RFC 7591) take JSON.
+    private static readonly string[] FormPaths = ["/token", "/revoke", "/login", "/consent"];
+
     private const string RateLimitedBody = "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32000,\"message\":\"Rate limit exceeded.\"},\"id\":null}";
 
     public static void AddHttpHardening(this IServiceCollection services, HttpHardeningOptions options)
@@ -122,6 +126,10 @@ internal static class HttpHardening
         app.UseRequestTimeouts();
         app.Use((context, next) => CheckOriginAndContentType(context, next, options));
         app.UseRateLimiter();
+
+        // After the limiter, so a caller cannot make the server buffer bodies beyond its limits.
+        // P2-4: authentication goes between the limiter and this step.
+        app.Use((context, next) => CheckBodySize(context, next, options));
     }
 
     /// <summary>Kestrel's limits (Mark's section 3). Not used by the in-memory test server.</summary>
@@ -146,8 +154,14 @@ internal static class HttpHardening
         headers.XContentTypeOptions = "nosniff";
         headers["Referrer-Policy"] = "no-referrer";
         headers.XFrameOptions = "DENY";
-        headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
-        if (IsMcpOrOAuth(context.Request.Path))
+
+        // Defaults only: an endpoint that sets its own (P2-5's HTML pages, threat model R18) keeps it.
+        if (string.IsNullOrEmpty(headers.ContentSecurityPolicy))
+        {
+            headers.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+        }
+
+        if (IsMcpOrOAuth(context.Request.Path) && string.IsNullOrEmpty(headers.CacheControl))
         {
             headers.CacheControl = "no-store";
         }
@@ -190,15 +204,14 @@ internal static class HttpHardening
         }
     }
 
-    // Origin (403) and Content-Type (415) checks, and the body-size limit (413). They run before the
-    // MCP SDK reads the request, so a rejected request never reaches it.
-    private static async Task CheckOriginAndContentType(HttpContext context, RequestDelegate next, HttpHardeningOptions options)
+    // Origin (403) and Content-Type (415) checks. They read headers only and run before the rate
+    // limiter, so a rejected request costs nothing and never reaches the MCP SDK.
+    private static Task CheckOriginAndContentType(HttpContext context, RequestDelegate next, HttpHardeningOptions options)
     {
         var request = context.Request;
         if (!IsMcpOrOAuth(request.Path))
         {
-            await next(context);
-            return;
+            return next(context);
         }
 
         // A browser page on another site (or one rebound to this address by DNS) sends its Origin.
@@ -207,57 +220,66 @@ internal static class HttpHardening
             && (origin.Count > 1 || !options.IsAllowedOrigin(origin.ToString())))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
+            return Task.CompletedTask;
         }
 
         if (HttpMethods.IsPost(request.Method))
         {
-            var expected = request.Path.Equals("/token") ? "application/x-www-form-urlencoded" : "application/json";
+            var expected = FormPaths.Any(p => request.Path.Equals(p)) ? "application/x-www-form-urlencoded" : "application/json";
             if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType)
                 || !contentType.MediaType.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
                 context.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
-                return;
+                return Task.CompletedTask;
+            }
+        }
+
+        return next(context);
+    }
+
+    // Body size (413), after the rate limiter. A declared length is checked at once. A chunked body
+    // has no declared length, so it is read here into memory, up to the limit, before the SDK sees
+    // it (the SDK would report Kestrel's own size error as a bad request). Nothing is written to
+    // disk, and the concurrency limiter bounds the memory (16 x 1 MiB by default).
+    private static async Task CheckBodySize(HttpContext context, RequestDelegate next, HttpHardeningOptions options)
+    {
+        var request = context.Request;
+        if (!HttpMethods.IsPost(request.Method) || !IsMcpOrOAuth(request.Path))
+        {
+            await next(context);
+            return;
+        }
+
+        var maxBody = request.Path.Equals(HttpServer.McpPath) ? options.MaxBodyBytes : Math.Min(options.MaxBodyBytes, 16 * 1024);
+        if (request.ContentLength > maxBody)
+        {
+            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            return;
+        }
+
+        if (request.ContentLength is null)
+        {
+            if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodySize)
+            {
+                bodySize.MaxRequestBodySize = maxBody;
             }
 
-            var maxBody = request.Path.Equals(HttpServer.McpPath) ? options.MaxBodyBytes : Math.Min(options.MaxBodyBytes, 16 * 1024);
-            if (request.ContentLength > maxBody)
+            var inMemory = (int)Math.Min(maxBody, int.MaxValue);
+            request.EnableBuffering(bufferThreshold: inMemory, bufferLimit: maxBody);
+            try
+            {
+                await request.Body.DrainAsync(context.RequestAborted);
+            }
+            catch (Exception ex) when (ex is Microsoft.AspNetCore.Http.BadHttpRequestException or IOException)
             {
                 context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
                 return;
             }
 
-            if (request.ContentLength is null && !await BufferChunkedBody(context, maxBody))
-            {
-                context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
-                return;
-            }
+            request.Body.Position = 0;
         }
 
         await next(context);
-    }
-
-    // A chunked body has no declared length. It is read here, up to the limit, so an oversized one
-    // gets 413 before the SDK sees it (the SDK would report Kestrel's error as a bad request).
-    private static async Task<bool> BufferChunkedBody(HttpContext context, long maxBody)
-    {
-        if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodySize)
-        {
-            bodySize.MaxRequestBodySize = maxBody;
-        }
-
-        context.Request.EnableBuffering(bufferThreshold: 64 * 1024, bufferLimit: maxBody);
-        try
-        {
-            await context.Request.Body.DrainAsync(context.RequestAborted);
-        }
-        catch (Exception ex) when (ex is Microsoft.AspNetCore.Http.BadHttpRequestException or IOException)
-        {
-            return false;
-        }
-
-        context.Request.Body.Position = 0;
-        return true;
     }
 
     private static bool IsOAuth(PathString path) => OAuthPaths.Any(p => path.Equals(p));
@@ -275,7 +297,7 @@ internal static class HttpHardening
             var (group, permits, window) =
                 path.Equals(HttpServer.McpPath) ? ("mcp", options.RateLimitPerIpPerMinute, options.RateLimitWindow)
                 : path.Equals(HttpServer.HealthPath) ? ("health", 60, options.RateLimitWindow)
-                : path.Equals("/token") ? ("oauth-token", 30, options.RateLimitWindow)
+                : path.Equals("/token") || path.Equals("/revoke") ? ("oauth-token", 30, options.RateLimitWindow)
                 : path.Equals("/register") ? ("oauth-register", 10, options.RateLimitWindow * 60)
                 : path.Equals("/authorize") || path.Equals("/login") || path.Equals("/consent") ? ("oauth-authorize", 20, options.RateLimitWindow)
                 : (null, 0, TimeSpan.Zero);

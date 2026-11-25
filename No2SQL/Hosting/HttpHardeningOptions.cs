@@ -96,6 +96,12 @@ internal sealed record HttpHardeningOptions
                 error = $"{AllowedHostsVariable} must not contain '*': list the host names clients use, for example no2sql.example.com.";
                 return false;
             }
+
+            // The public host is always accepted: behind a proxy it is the Host header of every call.
+            if (publicUrl is not null)
+            {
+                hosts.Add(publicUrl.IdnHost);
+            }
         }
         else
         {
@@ -129,6 +135,12 @@ internal sealed record HttpHardeningOptions
                 }
 
                 origins.Add(Normalize(origin));
+            }
+
+            // The owner's browser posts the built-in sign-in forms (P2-5) from the public origin.
+            if (publicUrl is not null)
+            {
+                origins.Add(Normalize(publicUrl));
             }
         }
         else

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.AspNetCore;
@@ -133,6 +134,60 @@ public class HttpHardeningTests
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
         Assert.Equal(string.Empty, await response.Content.ReadAsStringAsync(Cancel));
         Assert.DoesNotContain(logs.Entries, e => e.Exception is not null || e.Level >= LogLevel.Warning);
+    }
+
+    [Theory]
+    [InlineData("/token", "application/x-www-form-urlencoded", true)]
+    [InlineData("/revoke", "application/x-www-form-urlencoded", true)]
+    [InlineData("/login", "application/x-www-form-urlencoded; charset=utf-8", true)]
+    [InlineData("/consent", "application/x-www-form-urlencoded", true)]
+    [InlineData("/register", "application/json", true)]
+    [InlineData("/token", "application/json", false)]
+    [InlineData("/login", "application/json", false)]
+    [InlineData("/register", "application/x-www-form-urlencoded", false)]
+    public async Task OAuth_paths_take_their_own_Content_Type(string path, string contentType, bool accepted)
+    {
+        using var app = new No2SqlHttpApp();
+        using var client = app.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = new StringContent("a=b") };
+        request.Content.Headers.Remove("Content-Type");
+        request.Content.Headers.TryAddWithoutValidation("Content-Type", contentType);
+
+        using var response = await client.SendAsync(request, Cancel);
+
+        // The endpoints arrive with P2-5, so an accepted request reaches routing and gets 404.
+        Assert.Equal(accepted ? HttpStatusCode.NotFound : HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_endpoint_that_sets_its_own_CSP_and_Cache_Control_keeps_them()
+    {
+        using var app = new No2SqlHttpApp(services => services.AddSingleton<IStartupFilter>(new PageEndpoint()));
+        using var client = app.CreateClient();
+
+        using var response = await client.GetAsync("/authorize", Cancel);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("default-src 'self'; form-action https://client.example", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.True(response.Headers.CacheControl is { Private: true, NoStore: false, MaxAge.TotalSeconds: 0 }, "the page's own Cache-Control");
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+    }
+
+    [Fact]
+    public async Task Body_buffering_comes_after_the_rate_limiter()
+    {
+        var hardening = HttpHardeningOptions.Defaults with { RateLimitPerIpPerMinute = 1 };
+        using var app = new No2SqlHttpApp(null, null, hardening);
+        using var client = app.CreateClient();
+        using var first = McpPost();
+        await client.SendAsync(first, Cancel);
+
+        // Over the limit and over the size: the limiter answers first, without reading the body.
+        using var second = McpPost(body: new string(' ', 2 * 1024 * 1024));
+        using var response = await client.SendAsync(second, Cancel);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
     }
 
     [Theory]
@@ -332,7 +387,7 @@ public class HttpHardeningTests
         Assert.False(response.Headers.Contains("Strict-Transport-Security"), "no HSTS over plain http");
         if (noStore || path == "/healthz")
         {
-            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+            Assert.True(response.Headers.CacheControl?.NoStore, "Cache-Control: no-store");
         }
     }
 
@@ -444,6 +499,21 @@ public class HttpHardeningTests
         HttpBindings.TryParse(null, out var bindings, out _);
         Assert.True(HttpHardeningOptions.TryParse(name => variables.GetValueOrDefault(name), bindings, out var options, out var error), error);
         return options!;
+    }
+
+    // Stands in for a P2-5 HTML page that sets its own CSP and caching, mapped after the app's endpoints.
+    private sealed class PageEndpoint : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            next(app);
+            app.Run(context =>
+            {
+                context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; form-action https://client.example";
+                context.Response.Headers.CacheControl = "private, max-age=0";
+                return context.Response.WriteAsync("<html></html>");
+            });
+        };
     }
 
     // The in-memory server has no client address; this sets one, as a proxy's address would be.

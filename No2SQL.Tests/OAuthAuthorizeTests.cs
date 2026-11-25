@@ -381,6 +381,20 @@ public sealed class OAuthAuthorizeTests : IDisposable
     }
 
     [Fact]
+    public async Task Correct_passwords_do_not_count_toward_the_limit_for_everyone()
+    {
+        var (_, parameters) = await ValidRequestAsync();
+
+        // One more successful login than the hourly limit on failures from all addresses.
+        for (var i = 0; i <= LoginThrottle.MaxFailuresGlobal; i++)
+        {
+            var page = await LoginPageAsync(parameters);
+            using var right = await _server.LoginAsync(page, _server.Password, ip: $"192.0.2.{i % 50}").WaitAsync(TimeSpan.FromSeconds(10), Cancel);
+            Assert.Equal(HttpStatusCode.OK, right.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task One_hundred_failures_an_hour_from_all_addresses_lock_login_for_everyone()
     {
         var (_, parameters) = await ValidRequestAsync();

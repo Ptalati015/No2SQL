@@ -10,18 +10,26 @@ You need a DNS name that points at this machine, with ports 80 and 443 open to i
 
 ```sh
 cp env.example .env                     # set NO2SQL_DOMAIN (and optionally NO2SQL_ALLOWED_DATABASES)
-cp no2sql.env.example no2sql.env     # set NO2SQL_HTTP_TOKEN (openssl rand -base64 48) or the OAuth settings
+cp no2sql.env.example no2sql.env        # set NO2SQL_HTTP_TOKEN (openssl rand -base64 48) or the OAuth settings
 chmod 600 .env no2sql.env
-
 mkdir -p secrets data
-# Type or paste the connection string at the prompt, so it stays out of your shell history.
-# The subshell's umask creates the file as 0600 from the start (works in bash and zsh).
-printf 'MongoDB connection string: '; stty -echo; IFS= read -r conn; stty echo; echo
-(umask 077 && printf '%s' "$conn" > secrets/mongo.txt); unset conn
+```
+
+Run this line **on its own**, then type or paste the connection string at the prompt. It stays
+out of your shell history and off the screen. The subshell's umask creates the file as 0600 from
+the start, and the line works in bash and zsh. (If you paste it together with other lines, `read`
+would take the next pasted line as the connection string.)
+
+```sh
+printf 'MongoDB connection string: '; stty -echo; IFS= read -r conn; stty echo; echo; (umask 077 && printf '%s' "$conn" > secrets/mongo.txt); unset conn
+```
+
+Then:
+
+```sh
 sudo chown 1654:1654 secrets/mongo.txt data      # 1654 is the image's non-root "app" user
 sudo chmod 0400 secrets/mongo.txt
 sudo chmod 0700 data
-
 docker compose up -d
 ```
 

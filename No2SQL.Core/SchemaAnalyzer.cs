@@ -28,8 +28,9 @@ public partial class SchemaAnalyzer
     /// Analyzes the specified database and returns a schema summary.
     /// </summary>
     /// <param name="databaseName">The name of the MongoDB database to inspect</param>
+    /// <param name="cancellationToken">Stops the MongoDB calls when the caller gives up</param>
     /// <returns>A dictionary mapping collection names to field metadata</returns>
-    public async Task<Dictionary<string, List<string>>> AnalyzeAsync(string databaseName)
+    public async Task<Dictionary<string, List<string>>> AnalyzeAsync(string databaseName, CancellationToken cancellationToken = default)
     {
         // Outside the try: a setup problem must not be wrapped or logged with a stack trace.
         var client = _connection.Client;
@@ -38,14 +39,14 @@ public partial class SchemaAnalyzer
             var result = new Dictionary<string, List<string>>();
             var db = client.GetDatabase(databaseName);
             // Get all collections in the database
-            var collections = await db.ListCollectionNamesAsync();
-            var collectionNames = await collections.ToListAsync();
+            var collections = await db.ListCollectionNamesAsync(cancellationToken: cancellationToken);
+            var collectionNames = await collections.ToListAsync(cancellationToken);
 
             foreach (var collectionName in collectionNames)
             {
                 var collection = db.GetCollection<BsonDocument>(collectionName);
 
-                var sample = await collection.Find(Builders<BsonDocument>.Filter.Empty).Limit(1).FirstOrDefaultAsync();
+                var sample = await collection.Find(Builders<BsonDocument>.Filter.Empty).Limit(1).FirstOrDefaultAsync(cancellationToken);
 
                 var fields = new List<string>();
 
@@ -63,6 +64,11 @@ public partial class SchemaAnalyzer
             return result;
 
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller gave up: not an error, so nothing to log or wrap.
+            throw;
+        }
         catch (Exception ex)
         {
             if (ex.InnerException != null)
@@ -79,15 +85,21 @@ public partial class SchemaAnalyzer
     /// <summary>
     /// Lists all available databases on the MongoDB server.
     /// </summary>
+    /// <param name="cancellationToken">Stops the MongoDB calls when the caller gives up</param>
     /// <returns>A list of database names</returns>
-    public async Task<List<string>> ListDatabasesAsync()
+    public async Task<List<string>> ListDatabasesAsync(CancellationToken cancellationToken = default)
     {
         // Outside the try: a setup problem must not be wrapped or logged with a stack trace.
         var client = _connection.Client;
         try
         {
-            var databases = await client.ListDatabaseNamesAsync();
-            return await databases.ToListAsync();
+            var databases = await client.ListDatabaseNamesAsync(cancellationToken);
+            return await databases.ToListAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller gave up: not an error, so nothing to log or wrap.
+            throw;
         }
         catch (Exception ex)
         {
@@ -97,12 +109,12 @@ public partial class SchemaAnalyzer
     }
 
 
-    public async Task<Dictionary<string, SampledCollection>> SampleCollectionsAsync(string databaseName)
+    public async Task<Dictionary<string, SampledCollection>> SampleCollectionsAsync(string databaseName, CancellationToken cancellationToken = default)
     {
         var db = _connection.Client.GetDatabase(databaseName);
 
-        var collections = await db.ListCollectionNamesAsync();
-        var collectionNames = await collections.ToListAsync();
+        var collections = await db.ListCollectionNamesAsync(cancellationToken: cancellationToken);
+        var collectionNames = await collections.ToListAsync(cancellationToken);
 
         var fkPattern = MyRegex();
 
@@ -115,7 +127,7 @@ public partial class SchemaAnalyzer
             // Sample once
             var docs = await col.Find(FilterDefinition<BsonDocument>.Empty)
                                 .Limit(300)
-                                .ToListAsync();
+                                .ToListAsync(cancellationToken);
 
             var sampled = new SampledCollection
             {
@@ -178,10 +190,11 @@ public partial class SchemaAnalyzer
     /// Gets field relationships for a specific collection in the specified database.
     /// </summary>
     /// <param name="databaseName"></param>
+    /// <param name="cancellationToken">Stops the MongoDB calls when the caller gives up</param>
     /// <returns></returns>
-    public async Task<Dictionary<string, List<string>>> GetFieldRelationshipsAsync(string databaseName)
+    public async Task<Dictionary<string, List<string>>> GetFieldRelationshipsAsync(string databaseName, CancellationToken cancellationToken = default)
     {
-        var samples = await SampleCollectionsAsync(databaseName);
+        var samples = await SampleCollectionsAsync(databaseName, cancellationToken);
 
         return samples.ToDictionary(
             kvp => kvp.Key,
@@ -194,10 +207,11 @@ public partial class SchemaAnalyzer
     /// Gets all relationships by comparing ID-like fields to actual _id values across collections in the specified database.
     /// </summary>
     /// <param name="databaseName"></param>
+    /// <param name="cancellationToken">Stops the MongoDB calls when the caller gives up</param>
     /// <returns></returns>
-    public async Task<List<Relationship>> GetRelationshipsAsync(string databaseName)
+    public async Task<List<Relationship>> GetRelationshipsAsync(string databaseName, CancellationToken cancellationToken = default)
     {
-        var samples = await SampleCollectionsAsync(databaseName);
+        var samples = await SampleCollectionsAsync(databaseName, cancellationToken);
         var relationships = new List<Relationship>();
 
         foreach (var source in samples.Values)
@@ -246,9 +260,9 @@ public partial class SchemaAnalyzer
 
     }
    
-    public async Task<List<CollectionSchema>> AnalyzeCollectionsAsync(string databaseName)
+    public async Task<List<CollectionSchema>> AnalyzeCollectionsAsync(string databaseName, CancellationToken cancellationToken = default)
     {
-        var samples = await SampleCollectionsAsync(databaseName);
+        var samples = await SampleCollectionsAsync(databaseName, cancellationToken);
         var result = new List<CollectionSchema>();
 
         foreach (var kvp in samples)

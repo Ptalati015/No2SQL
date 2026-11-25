@@ -34,6 +34,12 @@ internal static class HttpServer
             return ConfigurationError;
         }
 
+        if (!HttpHardeningOptions.TryParse(Environment.GetEnvironmentVariable, bindings, out var hardening, out error))
+        {
+            Console.Error.WriteLine($"[No2SQL] {error}");
+            return ConfigurationError;
+        }
+
         // HTTP mode has no authentication yet, so it must not be reachable from other machines by
         // accident: anything but a loopback address needs the explicit --allow-anonymous flag.
         var exposed = bindings.Where(b => !b.IsLoopback).Select(b => b.DisplayUrl).ToList();
@@ -66,7 +72,7 @@ internal static class HttpServer
 
         builder.WebHost.UseKestrelCore().ConfigureKestrel(kestrel =>
         {
-            kestrel.AddServerHeader = false;
+            HttpHardening.ConfigureLimits(kestrel, hardening!);
             foreach (var binding in bindings)
             {
                 if (binding.IsLocalhostName)
@@ -84,7 +90,7 @@ internal static class HttpServer
             }
         });
 
-        ConfigureServices(builder.Services, mongoConn);
+        ConfigureServices(builder.Services, mongoConn, hardening);
 
         await using var app = builder.Build();
         ConfigurePipeline(app);
@@ -115,18 +121,25 @@ internal static class HttpServer
         }
 
         Console.Out.WriteLine($"[No2SQL] HTTP mode: MCP endpoint {McpPath} and health check {HealthPath} on {listenUrls}.");
+        Console.Out.WriteLine($"[No2SQL] HTTP hardening: {hardening!.Summary()}.");
+        foreach (var warning in hardening.Warnings)
+        {
+            Console.Out.WriteLine($"[No2SQL] WARNING: {warning}");
+        }
 
         await app.WaitForShutdownAsync();
         return 0;
     }
 
     /// <summary>
-    /// The services of HTTP mode: the shared No2SQL services and tools, routing, and the MCP SDK's
-    /// Streamable HTTP transport.
+    /// The services of HTTP mode: the shared No2SQL services and tools, routing, the hardening layer
+    /// (<see cref="HttpHardening"/>) and the MCP SDK's Streamable HTTP transport.
     /// </summary>
-    public static void ConfigureServices(IServiceCollection services, string? mongoConnectionString)
+    /// <param name="hardening">Null means the defaults for the default listen address.</param>
+    public static void ConfigureServices(IServiceCollection services, string? mongoConnectionString, HttpHardeningOptions? hardening = null)
     {
         services.AddRoutingCore();
+        services.AddHttpHardening(hardening ?? HttpHardeningOptions.Defaults);
         services
             .AddNo2SqlServices(mongoConnectionString)
             // Stateless Streamable HTTP: no Mcp-Session-Id, no GET stream, no legacy SSE endpoints.
@@ -135,12 +148,15 @@ internal static class HttpServer
     }
 
     /// <summary>
-    /// The whole request pipeline: routing and two endpoints. There is deliberately no developer
-    /// exception page, no static files, no HTTPS redirection and no request logging.
+    /// The whole request pipeline: the hardening layer around routing (see <see cref="HttpHardening"/>
+    /// for the order) and two endpoints. Any other path is a 404 with an empty body. There is
+    /// deliberately no developer exception page, no static files, no HTTPS redirection, no CORS and
+    /// no request logging.
     /// </summary>
     public static void ConfigurePipeline(IApplicationBuilder app)
     {
-        app.UseRouting();
+        app.UseHttpHardeningBeforeRouting();
+        app.UseHttpHardeningAfterRouting();
         app.UseEndpoints(endpoints =>
         {
             // Liveness only: no authentication, no MongoDB call, a fixed body.
@@ -149,7 +165,7 @@ internal static class HttpServer
                 context.Response.ContentType = "application/json";
                 context.Response.Headers.CacheControl = "no-store";
                 return context.Response.WriteAsync(HealthBody);
-            });
+            }).WithRequestTimeout("health");
             endpoints.MapMcp(McpPath);
         });
     }

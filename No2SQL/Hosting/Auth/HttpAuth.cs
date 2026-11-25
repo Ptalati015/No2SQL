@@ -110,7 +110,11 @@ internal static class HttpAuth
             return context.Response.WriteAsync(body);
         };
 
-        // The RFC 9728 path for the resource <public URL>/mcp, and the root form some clients try first.
+        // The RFC 9728 path for the resource <public URL>/mcp, and the root form. Every 401 points clients
+        // at the first through resource_metadata. The root form is the last well-known fallback in the MCP
+        // authorization spec (2025-11-25 and later) for a client that never saw that header; its "resource"
+        // is still <origin>/mcp, the MCP server URL. A strict RFC 9728 client that derived the identifier
+        // from the root path would see a mismatch and stop, which fails closed.
         endpoints.MapGet(HttpAuthOptions.ResourceMetadataPath, metadata);
         endpoints.MapGet("/.well-known/oauth-protected-resource", metadata);
     }
@@ -183,7 +187,9 @@ internal static class HttpAuth
         return true;
     }
 
-    // "aud" must be one JSON string equal to the MCP URL. An array, even one that contains it, is refused.
+    // "aud" must name the MCP URL and nothing else: one JSON string, or an array of exactly that one
+    // string (RFC 7519 4.1.3 makes the two forms equivalent, and some identity providers always write an
+    // array). A token for two or more audiences is refused even when the MCP URL is one of them.
     internal static bool HasSingleAudience(SecurityToken token, string expected)
     {
         if (token is not JsonWebToken jwt)
@@ -194,8 +200,22 @@ internal static class HttpAuth
         try
         {
             using var payload = JsonDocument.Parse(Base64UrlEncoder.DecodeBytes(jwt.EncodedPayload));
-            return payload.RootElement.TryGetProperty("aud", out var aud)
-                && aud.ValueKind == JsonValueKind.String
+            if (!payload.RootElement.TryGetProperty("aud", out var aud))
+            {
+                return false;
+            }
+
+            if (aud.ValueKind == JsonValueKind.Array)
+            {
+                if (aud.GetArrayLength() != 1)
+                {
+                    return false;
+                }
+
+                aud = aud[0];
+            }
+
+            return aud.ValueKind == JsonValueKind.String
                 && string.Equals(aud.GetString(), expected, StringComparison.Ordinal);
         }
         catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)

@@ -182,11 +182,40 @@ public sealed class JwtAuthTests : IDisposable
     }
 
     [Fact]
-    public async Task An_audience_array_is_refused_even_when_it_contains_the_MCP_URL()
+    public async Task An_audience_array_holding_only_the_MCP_URL_is_accepted()
     {
-        var reply = await CallAsync(_idp.Token(audience: new[] { TestIdentityProvider.McpUrl }, issuedAt: Now));
+        var reply = await CallAsync(TokenWithAudience(new JsonArray(TestIdentityProvider.McpUrl)));
+
+        Assert.Equal(HttpStatusCode.OK, reply.Http.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_audience_array_with_more_than_the_MCP_URL_is_refused()
+    {
+        var reply = await CallAsync(TokenWithAudience(new JsonArray(TestIdentityProvider.McpUrl, "https://other.example/api")));
 
         AssertInvalidToken(reply);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("[\"https://other.example/api\"]")]
+    [InlineData("[[\"https://mcp.example.test/mcp\"]]")]
+    [InlineData("[null]")]
+    [InlineData("42")]
+    public async Task Other_audience_shapes_are_refused(string audienceJson)
+    {
+        var reply = await CallAsync(TokenWithAudience(JsonNode.Parse(audienceJson)));
+
+        AssertInvalidToken(reply);
+    }
+
+    // A good token whose "aud" is exactly this JSON value.
+    private string TokenWithAudience(JsonNode? audience)
+    {
+        var payload = JsonNode.Parse(TestIdentityProvider.GoodPayload(Now))!;
+        payload["aud"] = audience;
+        return _idp.SignedWithHeader("""{"alg":"ES256","kid":"ec-1","typ":"at+jwt"}""", payload.ToJsonString());
     }
 
     [Theory]

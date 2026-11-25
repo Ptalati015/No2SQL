@@ -151,6 +151,17 @@ internal sealed partial record HttpAuthOptions
         return true;
     }
 
+    // The compiler-generated ToString would print the static token. This one only says whether it is
+    // set; a property added later is left out until it is added here on purpose.
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("StaticToken = ").Append(HasStaticToken ? "[set]" : "[unset]")
+            .Append(", Authority = ").Append(Authority)
+            .Append(", PublicUrl = ").Append(PublicUrl)
+            .Append(", Scope = ").Append(Scope);
+        return true;
+    }
+
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool IsUsableToken(string token, out string? error)

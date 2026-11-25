@@ -21,6 +21,16 @@ public class HttpAuthOptionsTests
     }
 
     [Fact]
+    public void ToString_never_prints_the_token()
+    {
+        Assert.True(Parse(new() { ["NO2SQL_HTTP_TOKEN"] = GoodToken }, out var options, out _));
+
+        Assert.DoesNotContain(GoodToken, options.ToString(), StringComparison.Ordinal);
+        Assert.Contains("StaticToken = [set]", options.ToString(), StringComparison.Ordinal);
+        Assert.Contains("StaticToken = [unset]", HttpAuthOptions.None.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_random_token_is_accepted()
     {
         Assert.True(Parse(new() { ["NO2SQL_HTTP_TOKEN"] = GoodToken }, out var options, out _));

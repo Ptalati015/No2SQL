@@ -34,6 +34,13 @@ jobs:
       - name: Build Release
         run: dotnet build No2SQL.sln -c Release --no-restore
 
+      # xUnit tests (No2SQL.Tests): HTTP mode on an in-memory server (health check, MCP endpoint,
+      # routes, a real SDK client), start-up options, listen-address checks, tool cancellation and
+      # the injectable clock. No port and no MongoDB needed.
+      - name: Unit and HTTP tests
+        timeout-minutes: 5
+        run: dotnet test No2SQL.sln -c Release --no-build
+
       # Starts the built server over stdio with no MongoDB and checks initialize + tools/list,
       # error handling, clean exit and that no environment values leak into its output.
       # --require-annotations: every tool must carry the MCP-3 annotations.
@@ -134,3 +141,16 @@ jobs:
         with:
           name: no2sql-packages
           path: artifacts/pack/*.nupkg
+      # P2-8: builds the multi-arch container image into an OCI archive (no Docker, no push) and
+      # checks it: platforms, non-root user, runtime >= 10.0.15, default env intact, no baked-in
+      # secret or --allow-anonymous, MCP name and OCI labels.
+      - name: Container image gate
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          version="$(dotnet msbuild No2SQL/No2SQL.csproj -getProperty:PackageVersion)"
+          version="${version//[$'\r\n ']/}"
+          dotnet publish No2SQL/No2SQL.csproj -c Release -t:PublishContainer -p:No2SqlContainer=true \
+            -p:ContainerArchiveOutputPath="$RUNNER_TEMP/no2sql-image.tar"
+          python3 -I .github/scripts/container_image_gate.py "$RUNNER_TEMP/no2sql-image.tar" \
+            --version "$version" --min-runtime 10.0.15 --require-revision

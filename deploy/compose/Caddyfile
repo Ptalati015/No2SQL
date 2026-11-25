@@ -1,0 +1,7 @@
+# TLS for No2SQL. Caddy gets and renews the certificate for NO2SQL_DOMAIN.
+{$NO2SQL_DOMAIN} {
+	header -Server
+	# Streams /mcp responses (text/event-stream) without buffering. Passes the Host header
+	# through unchanged, so it matches NO2SQL_PUBLIC_URL, and sets X-Forwarded-For.
+	reverse_proxy no2sql:8787
+}

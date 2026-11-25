@@ -129,6 +129,20 @@ jobs:
             fi
           done
 
+      # dotnet list package --vulnerable cannot see the .NET and ASP.NET Core runtime packs that the
+      # self-contained RID packages carry; their patch level comes from the SDK. Reads each bundled
+      # deps.json and fails if the nuget.org vulnerability feed lists that runtime version.
+      - name: Runtime patch-level gate
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          python3 -I .github/scripts/runtime_vuln_gate.py --self-test
+          pkgs=(artifacts/pack/No2SQL.win-*.nupkg artifacts/pack/No2SQL.linux-*.nupkg artifacts/pack/No2SQL.osx-*.nupkg)
+          test "${#pkgs[@]}" -eq 6
+          python3 -I .github/scripts/runtime_vuln_gate.py "${pkgs[@]}"
+
       - name: Upload packed artifacts
         uses: actions/upload-artifact@v4
         with:

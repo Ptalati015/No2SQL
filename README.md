@@ -95,6 +95,8 @@ No2SQL reads these environment variables. Set them in your MCP client's `env` co
 
 Without `NO2SQL_MONGO` the server still starts, lists its tools and answers `test_connectivity`. Every other tool returns an error saying that `NO2SQL_MONGO` is not set, and if the value isn't a valid MongoDB connection string, the error says that instead. Fix it in your client's `env` config and restart the server.
 
+> **Known issue (No2SQL 1.1.2 and earlier):** if the `compressors=` list in your `NO2SQL_MONGO` connection string starts with `zlib` (for example `compressors=zlib` or `compressors=zlib,snappy`), every tool that reads MongoDB fails with an "Unable to complete … See server logs" error. This is fixed in 1.2.0. Until then, remove `zlib` from the list or put `snappy` or `zstd` first, which work.
+
 ## Set up your AI client
 
 Each example uses the zip install on macOS or Linux (`/Users/you/tools/no2sql/No2SQL`). Change the path to where you unzipped it. On Windows, escape the backslashes in JSON (`"C:\\tools\\no2sql\\No2SQL.exe"`).

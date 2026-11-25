@@ -432,6 +432,34 @@ public sealed class OAuthCliAndStorageTests : IDisposable
         Assert.EndsWith("Set NO2SQL_DATA_DIR to a directory No2SQL can write.", refusal);
     }
 
+    [Fact]
+    public void Start_up_refuses_a_data_directory_it_cannot_write_even_when_every_file_is_already_there()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess, "File modes do not stop this user.");
+        var setup = FreshDirectory("Configured-Password-93");
+        Assert.Null(Prepare(setup));   // the keys exist and the password is configured: this start writes nothing it needs
+        var before = Directory.GetFileSystemEntries(_scratch).Order(StringComparer.Ordinal).ToList();
+        File.SetUnixFileMode(_scratch, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        var refusal = Prepare(setup);
+
+        Assert.Equal($"Cannot write to the data directory {_scratch} (UnauthorizedAccessException). Set NO2SQL_DATA_DIR to a directory the user running No2SQL can write.", refusal);
+        Assert.Equal(before, Directory.GetFileSystemEntries(_scratch).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void The_start_up_write_check_leaves_nothing_behind()
+    {
+        var setup = FreshDirectory("Configured-Password-93");
+
+        Assert.Null(Prepare(setup));
+        Assert.Null(Prepare(setup));
+
+        Assert.Equal(
+            new[] { ".lock", OAuthDataDirectory.KeysFile },
+            Directory.GetFileSystemEntries(_scratch).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
     // ---- R15: the generated owner password ----
 
     [Fact]

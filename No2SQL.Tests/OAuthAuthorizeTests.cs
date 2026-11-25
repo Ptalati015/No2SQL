@@ -328,9 +328,10 @@ public sealed class OAuthAuthorizeTests : IDisposable
             Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
         }
 
-        // The 21st is refused without checking, even with the right password.
+        // The 21st is refused without checking, even with the right password. It is refused at once: an
+        // attempt that was let through would wait for the server's clock, which nothing moves here.
         page = await LoginPageAsync(parameters);
-        using var refused = await _server.LoginAsync(page, _server.Password);
+        using var refused = await _server.LoginAsync(page, _server.Password).WaitAsync(TimeSpan.FromSeconds(10), Cancel);
         Assert.Equal((HttpStatusCode)429, refused.StatusCode);
         Assert.False(refused.Headers.Contains("Set-Cookie"));
 
@@ -369,11 +370,12 @@ public sealed class OAuthAuthorizeTests : IDisposable
             var page = await LoginPageAsync(parameters);
             for (var i = 0; i < 4; i++)
             {
-                using var wrong = await _server.LoginAsync(page, "wrong-password");
+                using var wrong = await _server.LoginAsync(page, "wrong-password").WaitAsync(TimeSpan.FromSeconds(10), Cancel);
                 Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
             }
 
-            using var right = await _server.LoginAsync(page, _server.Password);   // the fifth attempt: no wait yet
+            // The fifth attempt: no wait yet. (Bounded, because a count that was not cleared would make later rounds wait.)
+            using var right = await _server.LoginAsync(page, _server.Password).WaitAsync(TimeSpan.FromSeconds(10), Cancel);
             Assert.Equal(HttpStatusCode.OK, right.StatusCode);
         }
     }

@@ -146,6 +146,15 @@ internal static class OAuthServerSetup
 
         try
         {
+            directory.EnsureWritable();
+        }
+        catch (OAuthDataException ex)
+        {
+            return $"{ex.Message} Set {HttpAuthOptions.DataDirectoryVariable} to a directory the user running No2SQL can write.";
+        }
+
+        try
+        {
             SigningKeyStore.EnsureCreated(directory);
             _ = directory.Read<ClientsDocument>(OAuthDataDirectory.ClientsFile);
             _ = directory.Read<GrantsDocument>(OAuthDataDirectory.GrantsFile);

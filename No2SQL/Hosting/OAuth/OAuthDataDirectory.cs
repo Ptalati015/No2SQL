@@ -22,6 +22,7 @@ internal sealed class OAuthDataDirectory
     public const string GrantsFile = "refresh-tokens.json";
     public const string OwnerPasswordFile = "owner-password.json";
     private const string LockFile = ".lock";
+    private const UnixFileMode OwnerReadWrite = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
@@ -60,6 +61,26 @@ internal sealed class OAuthDataDirectory
             // CreateDirectory applies the umask; set the mode explicitly so it is exactly 0700.
             System.IO.File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
+    }
+
+    /// <summary>
+    /// Checks that files can be created in the directory, by creating and deleting one. Every sign-in writes
+    /// here, so the server finds this out at start-up and not at the first sign-in.
+    /// </summary>
+    /// <exception cref="OAuthDataException">The directory cannot be written.</exception>
+    public void EnsureWritable()
+    {
+        var probe = File($".write-check.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            CreateOwnerOnly(probe).Dispose();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new OAuthDataException($"Cannot write to the data directory {Path} ({ex.GetType().Name}).");
+        }
+
+        TryDelete(probe);
     }
 
     /// <summary>
@@ -192,20 +213,32 @@ internal sealed class OAuthDataDirectory
     {
         var path = File(LockFile);
         var deadline = DateTime.UtcNow + LockTimeout;
+        var writableChecked = false;
         while (true)
         {
             try
             {
                 // FileShare.None takes an exclusive advisory lock (flock) on Unix and a sharing lock on Windows.
-                return OperatingSystem.IsWindows()
-                    ? new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
-                    : new FileStream(path, new FileStreamOptions
-                    {
-                        Mode = FileMode.OpenOrCreate,
-                        Access = FileAccess.ReadWrite,
-                        Share = FileShare.None,
-                        UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
-                    });
+                if (OperatingSystem.IsWindows())
+                {
+                    return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                }
+
+                var stream = new FileStream(path, new FileStreamOptions
+                {
+                    Mode = FileMode.OpenOrCreate,
+                    Access = FileAccess.ReadWrite,
+                    Share = FileShare.None,
+                    UnixCreateMode = OwnerReadWrite,
+                });
+
+                // Exactly 0600 whatever the umask took away, or the next open for writing would be refused.
+                if (System.IO.File.GetUnixFileMode(stream.SafeFileHandle) != OwnerReadWrite)
+                {
+                    System.IO.File.SetUnixFileMode(stream.SafeFileHandle, OwnerReadWrite);
+                }
+
+                return stream;
             }
             catch (UnauthorizedAccessException)
             {
@@ -217,6 +250,15 @@ internal sealed class OAuthDataDirectory
             }
             catch (IOException) when (DateTime.UtcNow < deadline)
             {
+                // Usually another process holds the lock, and waiting helps. A directory that cannot be
+                // written (a read-only file system, a full disk) fails the same way and waiting does not
+                // help: find that out once, and say so now instead of after the whole timeout.
+                if (!writableChecked)
+                {
+                    writableChecked = true;
+                    EnsureWritable();
+                }
+
                 Thread.Sleep(20);
             }
             catch (IOException ex)
@@ -233,13 +275,17 @@ internal sealed class OAuthDataDirectory
             return new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.None, OwnerOnlyFileSecurity());
         }
 
-        return new FileStream(path, new FileStreamOptions
+        var stream = new FileStream(path, new FileStreamOptions
         {
             Mode = FileMode.CreateNew,
             Access = FileAccess.Write,
             Share = FileShare.None,
-            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            UnixCreateMode = OwnerReadWrite,
         });
+
+        // The create mode is filtered by the umask (which can only take bits away); set it so it is exactly 0600.
+        System.IO.File.SetUnixFileMode(stream.SafeFileHandle, OwnerReadWrite);
+        return stream;
     }
 
     private static void TryDelete(string path)
